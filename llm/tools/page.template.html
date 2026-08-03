@@ -137,7 +137,7 @@ input[type=range]{width:100%;accent-color:var(--s1)}
 .needle:before{content:"";position:absolute;top:-5px;left:-4px;border:5px solid transparent;border-top-color:#fff}
 
 /* ---------- output ---------- */
-.outBox{padding:18px;border-radius:16px;background:var(--surface-2);border:1px solid var(--line);
+.outBox{padding:18px;border-radius:16px;background:var(--surface-2);border:1px solid var(--line);white-space:pre-wrap;
   font-size:clamp(18px,3.6vw,26px);line-height:1.9;min-height:110px;letter-spacing:.02em;word-break:break-word}
 .outBox .p{color:var(--text-secondary)}
 .outBox .g{color:var(--text-primary)}
@@ -540,6 +540,8 @@ function ctx2d(cv, w, h) {
   return g;
 }
 const showChar = (c) => (c === '\n' ? '⏎' : c === ' ' ? '␣' : c);
+// 輸出框要讀得像一句話：空白就是空白，換行顯示 ⏎ 並真的換行
+const outChar = (c) => (c === '\n' ? '⏎\n' : c);
 
 /* ---- Step 1 ---- */
 function renderTokens(tokens, nPrompt, revealTo) {
@@ -889,7 +891,7 @@ async function runOnce(tokens, nPrompt, isFirst) {
   const gen = $('outGen');
   const span = document.createElement('span');
   span.className = 'last';
-  span.textContent = showChar(VOCAB[chosen]);
+  span.textContent = outChar(VOCAB[chosen]);
   Array.from(gen.querySelectorAll('.last')).forEach((e) => e.classList.remove('last'));
   gen.appendChild(span);
   $('r6').innerHTML = '新的字被接到序列尾巴，序列長度變成 <b>' + (T + 1) + '</b>，然後整個流程重跑一次。' +
@@ -936,7 +938,7 @@ async function start() {
 
   const nPrompt = kept.length;
   let tokens = kept.slice();
-  $('outPrompt').textContent = tokens.map((t) => showChar(VOCAB[t])).join('');
+  $('outPrompt').textContent = tokens.map((t) => outChar(VOCAB[t])).join('');
   $('outGen').innerHTML = '';
   $('needle').classList.remove('show');
   const N = parseInt($('len').value, 10);
