@@ -177,7 +177,7 @@ footer a{color:var(--s1)}
   <div class="ctrlGrid">
     <div>
       <label class="fld" for="prompt">輸入提示（Prompt）</label>
-      <input id="prompt" type="text" maxlength="40" value="今天天氣" autocomplete="off" spellcheck="false">
+      <input id="prompt" type="text" maxlength="40" value="MOCVD 的成長" autocomplete="off" spellcheck="false">
     </div>
     <div class="btnRow">
       <button id="runBtn" class="primary">▶ 開始演示</button>
@@ -187,11 +187,12 @@ footer a{color:var(--s1)}
   </div>
   <div class="presets">
     <span class="lbl">試試看：</span>
+    <button class="chip preset">MOCVD 的成長</button>
+    <button class="chip preset">Cpk 大於</button>
+    <button class="chip preset">PL 的波長</button>
+    <button class="chip preset">連續七點</button>
+    <button class="chip preset">量子井的</button>
     <button class="chip preset">今天天氣</button>
-    <button class="chip preset">老師說，</button>
-    <button class="chip preset">如果明天下雨</button>
-    <button class="chip preset">注意力讓每個字</button>
-    <button class="chip preset">我喜歡在早上</button>
   </div>
   <div id="warn" class="warn"></div>
 
@@ -234,7 +235,7 @@ footer a{color:var(--s1)}
 <section class="stage" id="s1">
   <h2><span class="tag">Step 1</span>分詞 Tokenization</h2>
   <p class="lead">模型不認得文字，只認得數字。第一步是把輸入切成一個個 <b>token</b>，再用字典查出每個 token 的 <code>id</code>。
-    這個示範模型用「一個字＝一個 token」的中文字元切法；ChatGPT 這類大模型用的是 BPE，一個 token 可能是半個英文單字。</p>
+    這個示範模型用「一個字元＝一個 token」的切法，所以中文一個字是一個 token，而 <code>MOCVD</code> 會被切成 5 個 token——英文和數字天生就比中文吃 token。ChatGPT 這類大模型用的是 BPE，一個 token 通常是半個英文單字或一小段中文詞。</p>
   <div class="viz"><div class="tokRow" id="tokRow"></div></div>
   <div class="readout" id="r1">等待開始…</div>
 </section>
@@ -242,12 +243,12 @@ footer a{color:var(--s1)}
 <!-- 2 ─────────────────────────────────────────── -->
 <section class="stage" id="s2">
   <h2><span class="tag">Step 2</span>詞向量 Embedding</h2>
-  <p class="lead">每個 token id 會去查一張<b>詞向量表</b>，換成一串數字（本模型是 48 維）。這串數字就是這個字的「意思座標」。
+  <p class="lead">每個 token id 會去查一張<b>詞向量表</b>，換成一串數字（本模型是 <b class="dimC"></b> 維）。這串數字就是這個字的「意思座標」。
     再加上一個只跟<b>位置</b>有關的向量，模型才知道誰先誰後——底下每一直行就是一個 token 的向量，
     <span style="color:var(--s2)">橘色為正</span>、<span style="color:var(--s1)">藍色為負</span>、越暗越接近 0。</p>
   <div class="viz">
     <div class="canvasRow">
-      <div><div class="colTitle">詞向量 token embedding</div><canvas id="cvTok" role="img" aria-label="詞向量表熱圖，每一直行是一個 token 的 48 維向量"></canvas></div>
+      <div><div class="colTitle">詞向量 token embedding</div><canvas id="cvTok" role="img" aria-label="詞向量表熱圖，每一直行是一個 token 的向量"></canvas></div>
       <div class="op">＋</div>
       <div><div class="colTitle">位置向量 position</div><canvas id="cvPos" role="img" aria-label="位置向量熱圖"></canvas></div>
       <div class="op">＝</div>
@@ -255,7 +256,7 @@ footer a{color:var(--s1)}
     </div>
     <div class="legend">
       <span class="k"><span class="ramp" id="rampDiv"></span>負 ← 0 → 正</span>
-      <span class="k">每一直行 = 1 個 token，48 格 = 48 個維度</span>
+      <span class="k">每一直行 = 1 個 token，每一格 = 1 個維度，共 <b class="dimC"></b> 維</span>
     </div>
   </div>
   <div class="readout" id="r2">等待開始…</div>
@@ -287,10 +288,10 @@ footer a{color:var(--s1)}
 <!-- 4 ─────────────────────────────────────────── -->
 <section class="stage" id="s4">
   <h2><span class="tag">Step 4</span>前饋網路 Feed-Forward</h2>
-  <p class="lead">注意力負責「跟別人交換情報」，前饋網路負責「自己想一想」。它把 48 維先<b>放大</b>到 128 維，
-    用 GELU 激活函數過濾掉沒用的訊號，再<b>壓回</b> 48 維。多數模型有一半以上的參數都放在這裡，知識大多存在這一層。</p>
+  <p class="lead">注意力負責「跟別人交換情報」，前饋網路負責「自己想一想」。它把 <b class="dimC"></b> 維先<b>放大</b>到 <b class="dimF"></b> 維，
+    用 GELU 激活函數過濾掉沒用的訊號，再<b>壓回</b> <b class="dimC"></b> 維。多數模型有一半以上的參數都放在這裡，知識大多存在這一層。</p>
   <div class="viz">
-    <canvas id="cvFfn" role="img" aria-label="前饋網路：48 維輸入、128 維隱藏層激活、48 維輸出"></canvas>
+    <canvas id="cvFfn" role="img" aria-label="前饋網路：輸入向量、放大後的隱藏層激活、壓回原維度的輸出"></canvas>
     <div class="legend">
       <span class="k"><span class="swatch" style="background:var(--s3)"></span>激活值越大 = 這個「神經元」越興奮</span>
       <span class="k">顯示的是目前最後一個 token 在第 <b id="ffnLayer">1</b> 層的實際數值</span>
@@ -334,7 +335,7 @@ footer a{color:var(--s1)}
 
 <footer>
   <p><b>關於這個模型：</b>這是一個從零訓練的 char-level GPT，參數量 <span id="fParams"></span>，
-  訓練語料只有 <span id="fCorpus"></span> 個字的中文短句，所以它只會講很簡單、很像訓練資料的句子——
+  訓練語料只有 <span id="fCorpus"></span> 個字，內容是 III/V 族磊晶與 SPC 統計製程管制的中文短句，所以它只會講這個領域裡、很像訓練資料的句子——
   它跟 GPT 這類模型的<b>架構是一樣的</b>，差別只在規模（大模型的參數量是它的<b>一千萬倍以上</b>）。</p>
   <p>權重以 int8 量化後直接內嵌在這個 HTML 檔裡，推論全部在你的瀏覽器完成，不會連線到任何伺服器。</p>
 </footer>
@@ -667,7 +668,7 @@ function drawFFN(cv, xin, act, xout, C, F, phase) {
     }
     g.globalAlpha = 1;
   }
-  // 左：輸入 48 維
+  // 左：輸入向量
   for (let i = 0; i < C; i++) {
     g.fillStyle = diverging(xin[i], mIn);
     g.fillRect(x0, 26 + i * cellH, colW, Math.max(1, cellH - 0.6));
@@ -683,7 +684,7 @@ function drawFFN(cv, xin, act, xout, C, F, phase) {
   }
   g.strokeStyle = 'rgba(255,255,255,.14)'; g.lineWidth = 1;
   g.beginPath(); g.moveTo(x1, 26 + midH / 2 + .5); g.lineTo(x1 + midW, 26 + midH / 2 + .5); g.stroke();
-  // 右：輸出 48 維
+  // 右：輸出向量
   const revealO = phase > 1.4 ? Math.min(1, (phase - 1.4) / 0.6) : 0;
   for (let i = 0; i < C; i++) {
     g.globalAlpha = revealO;
@@ -692,9 +693,9 @@ function drawFFN(cv, xin, act, xout, C, F, phase) {
     g.globalAlpha = 1;
   }
   g.fillStyle = 'rgba(185,185,198,.9)'; g.font = '11px ui-monospace,monospace'; g.textAlign = 'left';
-  g.fillText('輸入 48 維', x0, 14);
-  g.fillText('隱藏層 128 維（GELU 之後）', x1, 14);
-  g.textAlign = 'right'; g.fillText('輸出 48 維', x2 + colW, 14);
+  g.fillText('輸入 ' + C + ' 維', x0, 14);
+  g.fillText('隱藏層 ' + F + ' 維（GELU 之後）', x1, 14);
+  g.textAlign = 'right'; g.fillText('輸出 ' + C + ' 維', x2 + colW, 14);
 }
 
 /* ==========================================================
@@ -916,12 +917,12 @@ async function start() {
   const { kept, dropped } = sanitize($('prompt').value.trim());
   const warn = $('warn');
   if (dropped.length) {
-    warn.textContent = '⚠ 這個迷你模型的字典只有 ' + CFG.V + ' 個字，以下字不在字典裡，已被略過：' +
+    warn.textContent = '⚠ 這個迷你模型的字典只有 ' + CFG.V + ' 個字元（只涵蓋訓練語料用過的字），以下字不在字典裡，已被略過：' +
       Array.from(new Set(dropped)).join(' ') + '（試試上面的範例句）';
     warn.classList.add('show');
   } else warn.classList.remove('show');
   if (!kept.length) {
-    warn.textContent = '⚠ 請輸入至少一個模型認得的字，例如「今天天氣」。';
+    warn.textContent = '⚠ 請輸入至少一個模型認得的字，例如「MOCVD 的成長」。';
     warn.classList.add('show');
     return;
   }
@@ -1020,12 +1021,14 @@ const specs = [
   ['上下文', CFG.B + ' tokens'],
 ];
 $('specs').innerHTML = specs.map((s) => '<span class="spec">' + s[0] + ' <b>' + s[1] + '</b></span>').join('');
+document.querySelectorAll('.dimC').forEach((e) => { e.textContent = CFG.C; });
+document.querySelectorAll('.dimF').forEach((e) => { e.textContent = CFG.F; });
 $('fParams').textContent = N_PARAMS.toLocaleString();
 $('fCorpus').textContent = '__CORPUS_CHARS__';
 
 // 先靜態畫一次，讓頁面一打開就有東西看
 (function preview() {
-  const toks = sanitize('今天天氣很好').kept;
+  const toks = sanitize('MOCVD 的成長溫度').kept;
   curTokens = toks;
   const c = forward(toks);
   lastCache = c;
@@ -1040,7 +1043,7 @@ $('fCorpus').textContent = '__CORPUS_CHARS__';
   drawFFN($('cvFfn'), b.ln2.subarray((T - 1) * CFG.C, T * CFG.C), b.act.subarray((T - 1) * CFG.F, T * CFG.F), b.fo.subarray((T - 1) * CFG.C, T * CFG.C), CFG.C, CFG.F, 2);
   const { keep, probs } = softmaxTopK(c.logits, 1.3, 8);
   renderBars($('genBars'), keep.map((v, i) => ({ label: showChar(VOCAB[v]), frac: probs[i], text: (probs[i] * 100).toFixed(1) + '%' })), () => 'var(--s1)', false);
-  $('outPrompt').textContent = '今天天氣很好';
+  $('outPrompt').textContent = 'MOCVD 的成長溫度';
   document.querySelectorAll('.readout').forEach((e) => { e.innerHTML = '👆 按「開始演示」就會看到這一步的實際運算。'; });
   for (let i = 1; i <= 6; i++) stageEls[i].classList.add('visited');
 })();

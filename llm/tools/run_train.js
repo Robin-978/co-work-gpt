@@ -9,7 +9,17 @@ const stoi = new Map(chars.map((c, i) => [c, i]));
 const data = Int32Array.from(Array.from(text).map((c) => stoi.get(c)));
 console.log('corpus chars', text.length, 'vocab', chars.length);
 
-const cfg = { V: chars.length, C: 48, L: 2, H: 3, F: 128, B: 48 };
+// 超參數可用環境變數覆寫，例如：DIM=48 HEADS=3 FF=128 STEPS=3000 node run_train.js
+const num = (k, d) => (process.env[k] ? parseInt(process.env[k], 10) : d);
+const cfg = {
+  V: chars.length,
+  C: num('DIM', 64),      // 向量維度，必須能被 HEADS 整除
+  L: num('LAYERS', 2),    // 層數
+  H: num('HEADS', 4),     // 注意力頭數
+  F: num('FF', 192),      // 前饋層寬度
+  B: num('BLOCK', 48),    // 上下文長度
+};
+if (cfg.C % cfg.H) throw new Error('DIM 必須能被 HEADS 整除');
 const model = makeModel(cfg);
 const params = paramList(model);
 console.log('params', params.reduce((a, [, x]) => a + x.length, 0));
@@ -19,9 +29,10 @@ const m = {}, v = {};
 for (const [name, arr] of params) { m[name] = new Float32Array(arr.length); v[name] = new Float32Array(arr.length); }
 
 const T = cfg.B;
-const BATCH = 12;
-const STEPS = parseInt(process.env.STEPS || '2600', 10);
-const LR = 3e-3, WARM = 120, MINLR = 2e-4, WD = 0.02;
+const BATCH = num('BATCH', 12);
+const STEPS = num('STEPS', 7000);
+const LR = process.env.LR ? parseFloat(process.env.LR) : 2.5e-3;
+const WARM = 150, MINLR = 1.5e-4, WD = 0.02;
 const beta1 = 0.9, beta2 = 0.95, eps = 1e-8;
 
 let seed = 7;
@@ -73,8 +84,9 @@ for (let step = 1; step <= STEPS; step++) {
     console.log(`step ${step}/${STEPS} loss ${loss.toFixed(4)} lr ${lr.toExponential(2)} |g| ${norm.toFixed(2)} ${el}s`);
   }
   if (step % 400 === 0 || step === STEPS) {
-    console.log('  sample:', sample('今天天氣', 40, 0.7));
-    console.log('  sample:', sample('老師說，', 40, 0.7));
+    for (const q of (process.env.SAMPLES || 'MOCVD 的|Cpk 大於|磊晶的').split('|')) {
+      console.log('  sample:', sample(q, 40, 0.9));
+    }
     save();
   }
   if (loss < best) best = loss;
