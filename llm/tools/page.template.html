@@ -1,0 +1,1050 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0b12">
+<title>LLM 運作動態演示 · 看得見的小型語言模型</title>
+<meta name="description" content="用真實的小型 Transformer，一步一步動畫演示 Tokenization、Embedding、Attention、FFN、Generation 到輸出的完整過程。">
+<style>
+:root{
+  --bg:#0b0b12;
+  --surface-1:#14141d;
+  --surface-2:#1c1c28;
+  --surface-3:#252534;
+  --line:rgba(255,255,255,.10);
+  --line-strong:rgba(255,255,255,.20);
+  --text-primary:#f5f5f7;
+  --text-secondary:#b9b9c6;
+  --text-muted:#7c7c8d;
+  /* categorical slots (dark steps) */
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s7:#9085e9;
+  --radius:18px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:
+    radial-gradient(900px 520px at 12% -8%,rgba(57,135,229,.16),transparent 60%),
+    radial-gradient(760px 460px at 92% 2%,rgba(144,133,233,.13),transparent 62%),
+    var(--bg);
+  color:var(--text-primary);
+  font-family:"Noto Sans TC","Microsoft JhengHei UI",system-ui,-apple-system,"Segoe UI",sans-serif;
+  line-height:1.65;-webkit-font-smoothing:antialiased;
+}
+.wrap{width:min(1120px,100%);margin:0 auto;padding:26px 18px 80px}
+
+/* ---------- header ---------- */
+header.top{padding:12px 0 6px}
+.eyebrow{margin:0 0 6px;font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--s1);font-weight:700}
+h1{margin:0;font-size:clamp(28px,5.4vw,46px);line-height:1.18;letter-spacing:.01em}
+.sub{margin:12px 0 0;max-width:70ch;color:var(--text-secondary);font-size:clamp(14px,2.4vw,16.5px)}
+.specs{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.spec{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--line);border-radius:999px;background:var(--surface-1);font-size:12.5px;color:var(--text-secondary)}
+.spec b{color:var(--text-primary);font-variant-numeric:tabular-nums;font-weight:700}
+
+/* ---------- controls ---------- */
+.panel{margin-top:22px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface-1);padding:16px}
+.ctrlGrid{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end}
+label.fld{display:block;font-size:12.5px;color:var(--text-muted);margin-bottom:6px;letter-spacing:.04em}
+input[type=text]{width:100%;padding:13px 14px;border:1px solid var(--line-strong);border-radius:14px;background:var(--surface-2);color:var(--text-primary);font:inherit;font-size:16px}
+input[type=text]:focus{outline:2px solid var(--s1);outline-offset:1px}
+.btnRow{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;cursor:pointer;border-radius:13px;border:1px solid var(--line-strong);background:var(--surface-2);color:var(--text-primary);padding:12px 16px;transition:.15s transform,.15s background,.15s border-color}
+button:hover:not(:disabled){background:var(--surface-3)}
+button:active:not(:disabled){transform:translateY(1px)}
+button:disabled{opacity:.42;cursor:not-allowed}
+button.primary{background:linear-gradient(135deg,var(--s1),#5a6fe0);border-color:transparent;color:#fff;font-weight:700;box-shadow:0 10px 26px rgba(57,135,229,.24)}
+button.chip{padding:7px 12px;border-radius:999px;font-size:13px;color:var(--text-secondary)}
+button.chip[aria-pressed=true]{background:rgba(57,135,229,.18);border-color:var(--s1);color:#dce9fb}
+.presets{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
+.presets .lbl{font-size:12.5px;color:var(--text-muted)}
+.sliders{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+.slider .head{display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-muted);margin-bottom:4px}
+.slider .head b{color:var(--text-primary);font-variant-numeric:tabular-nums;font-family:var(--mono)}
+input[type=range]{width:100%;accent-color:var(--s1)}
+.toggles{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+
+/* ---------- stepper ---------- */
+.stepper{position:sticky;top:0;z-index:30;margin:22px -18px 0;padding:10px 18px;
+  background:rgba(11,11,18,.86);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);
+  display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}
+.stepper::-webkit-scrollbar{display:none}
+.step{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:8px 13px;border-radius:999px;border:1px solid var(--line);
+  background:var(--surface-1);color:var(--text-secondary);font-size:13px;white-space:nowrap;cursor:pointer;transition:.2s}
+.step .n{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--surface-3);color:var(--text-secondary);font-size:11px;font-weight:700;font-family:var(--mono)}
+.step.done{border-color:rgba(25,158,112,.4);color:#a9dcc7}
+.step.done .n{background:var(--s3);color:#04170f}
+.step.active{border-color:var(--s1);background:rgba(57,135,229,.16);color:#dce9fb;box-shadow:0 0 0 1px rgba(57,135,229,.35)}
+.step.active .n{background:var(--s1);color:#03101f}
+.miniCtrl{flex:0 0 auto;display:flex;gap:6px}
+.mini{padding:7px 11px;border-radius:999px;font-size:13px;line-height:1}
+.progressTag{flex:0 0 auto;margin-left:auto;align-self:center;padding:7px 12px;border-radius:999px;border:1px dashed var(--line-strong);
+  font-size:12.5px;color:var(--text-muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* ---------- stage cards ---------- */
+.stage{margin-top:20px;border:1px solid var(--line);border-radius:24px;background:var(--surface-1);padding:20px;
+  opacity:.5;transition:.35s opacity,.35s border-color,.35s box-shadow;scroll-margin-top:74px}
+.stage.on{opacity:1;border-color:rgba(57,135,229,.42);box-shadow:0 0 0 1px rgba(57,135,229,.16),0 22px 60px rgba(0,0,0,.4)}
+.stage.visited{opacity:1}
+.stage h2{margin:0;font-size:clamp(19px,3.6vw,23px);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.stage h2 .tag{font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-muted);font-weight:600;border:1px solid var(--line);padding:3px 9px;border-radius:999px}
+.lead{margin:10px 0 16px;color:var(--text-secondary);font-size:14.5px;max-width:78ch}
+.lead code{font-family:var(--mono);font-size:13px;background:var(--surface-3);padding:1px 6px;border-radius:6px;color:#cfe2fb}
+.viz{border:1px solid var(--line);border-radius:16px;background:var(--surface-2);padding:14px;overflow-x:auto}
+.readout{margin-top:12px;padding:11px 13px;border-radius:13px;background:var(--surface-2);border:1px solid var(--line);
+  font-size:13.5px;color:var(--text-secondary);min-height:44px}
+.readout b{color:var(--text-primary)}
+.readout .num{font-family:var(--mono);color:#cfe2fb;font-variant-numeric:tabular-nums}
+.hint{margin-top:10px;font-size:12.5px;color:var(--text-muted)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:10px;font-size:12px;color:var(--text-muted)}
+.legend .k{display:inline-flex;align-items:center;gap:6px}
+.swatch{width:12px;height:12px;border-radius:3px;border:1px solid rgba(255,255,255,.18)}
+.ramp{width:78px;height:10px;border-radius:3px;border:1px solid rgba(255,255,255,.18)}
+
+/* ---------- stage 1 tokens ---------- */
+.tokRow{display:flex;flex-wrap:wrap;gap:8px;min-height:74px;align-items:flex-start}
+.tok{--c:var(--s1);position:relative;display:grid;justify-items:center;gap:2px;padding:8px 11px 6px;border-radius:12px;
+  border:1px solid color-mix(in srgb,var(--c) 46%,transparent);background:color-mix(in srgb,var(--c) 15%,var(--surface-3));
+  opacity:0;transform:translateY(10px) scale(.9);transition:.28s cubic-bezier(.2,.9,.3,1.2)}
+.tok.in{opacity:1;transform:none}
+.tok.cur{box-shadow:0 0 0 2px var(--c),0 8px 22px rgba(0,0,0,.35)}
+.tok .ch{font-size:21px;line-height:1.1;font-weight:700}
+.tok .id{font-family:var(--mono);font-size:10.5px;color:var(--text-muted)}
+.tok.new{--c:var(--s4)}
+.tok.prompt{--c:var(--s1)}
+
+/* ---------- attention head picker ---------- */
+.picker{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.attGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,300px);gap:16px;align-items:start}
+@media(max-width:820px){.attGrid{grid-template-columns:1fr}}
+.bars{display:grid;gap:7px}
+.bar{display:grid;grid-template-columns:34px 1fr 52px;gap:8px;align-items:center;font-size:13px}
+.bar .lab{text-align:right;font-weight:600}
+.bar .track{height:12px;border-radius:4px;background:var(--surface-3);overflow:hidden}
+.bar .fill{height:100%;width:0;border-radius:4px;background:var(--s1);transition:width .4s cubic-bezier(.2,.8,.3,1)}
+.bar .val{font-family:var(--mono);font-size:11.5px;color:var(--text-muted);text-align:right;font-variant-numeric:tabular-nums}
+
+/* ---------- generation ---------- */
+.genGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,270px);gap:16px;align-items:start}
+@media(max-width:820px){.genGrid{grid-template-columns:1fr}}
+.roulette{margin-top:14px}
+.rouletteTrack{position:relative;display:flex;gap:2px;height:30px;border-radius:9px;overflow:hidden;border:1px solid var(--line);background:var(--surface-3)}
+.rouletteTrack .seg{height:100%;position:relative;width:0;transition:width .45s cubic-bezier(.2,.8,.3,1)}
+.needle{position:absolute;top:-9px;bottom:-9px;width:2px;background:#fff;left:0;opacity:0;transition:left .8s cubic-bezier(.3,.9,.25,1),opacity .2s;box-shadow:0 0 10px rgba(255,255,255,.8)}
+.needle.show{opacity:1}
+.needle:before{content:"";position:absolute;top:-5px;left:-4px;border:5px solid transparent;border-top-color:#fff}
+
+/* ---------- output ---------- */
+.outBox{padding:18px;border-radius:16px;background:var(--surface-2);border:1px solid var(--line);
+  font-size:clamp(18px,3.6vw,26px);line-height:1.9;min-height:110px;letter-spacing:.02em;word-break:break-word}
+.outBox .p{color:var(--text-secondary)}
+.outBox .g{color:var(--text-primary)}
+.outBox .last{color:#ffd28a;text-shadow:0 0 22px rgba(201,133,0,.5)}
+.caret{display:inline-block;width:2px;height:1em;background:var(--s4);vertical-align:-.12em;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.loopNote{display:flex;align-items:center;gap:10px;margin-top:14px;padding:11px 14px;border-radius:13px;
+  border:1px dashed var(--line-strong);color:var(--text-secondary);font-size:13.5px;transition:.3s}
+.loopNote.pulse{border-color:var(--s4);color:#ffd9a3;background:rgba(201,133,0,.10)}
+.loopNote .arrow{font-size:18px}
+
+/* ---------- misc ---------- */
+canvas{display:block;max-width:100%}
+.canvasRow{display:flex;gap:12px;align-items:center;flex-wrap:nowrap;min-width:min-content}
+.op{font-size:26px;color:var(--text-muted);font-family:var(--mono);flex:0 0 auto;padding:0 2px}
+.cap{font-size:11.5px;color:var(--text-muted);margin-bottom:6px;letter-spacing:.04em}
+.colTitle{font-size:12.5px;color:var(--text-secondary);margin-bottom:8px;font-weight:600}
+footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);color:var(--text-muted);font-size:13px}
+footer a{color:var(--s1)}
+.warn{margin-top:10px;padding:10px 12px;border-radius:12px;border:1px solid rgba(217,89,38,.45);background:rgba(217,89,38,.12);color:#f3c3ac;font-size:13px;display:none}
+.warn.show{display:block}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;transition-duration:.001ms!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <p class="eyebrow">Inside a Language Model</p>
+  <h1>看得見的 LLM：一個字是怎麼被想出來的</h1>
+  <p class="sub">這一頁跑的是一個<strong>真的</strong>語言模型——一個在瀏覽器裡即時推論的迷你 Transformer。你輸入的每個字，都會實際走過
+    分詞 → 詞向量 → 注意力 → 前饋網路 → 取樣 → 輸出，畫面上的每個顏色格子、每條長條，都是它<strong>當下算出來的真實數值</strong>，不是示意動畫。</p>
+  <div class="specs" id="specs"></div>
+</header>
+
+<section class="panel">
+  <div class="ctrlGrid">
+    <div>
+      <label class="fld" for="prompt">輸入提示（Prompt）</label>
+      <input id="prompt" type="text" maxlength="40" value="今天天氣" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="btnRow">
+      <button id="runBtn" class="primary">▶ 開始演示</button>
+      <button id="pauseBtn" disabled>⏸ 暫停</button>
+      <button id="stopBtn" disabled>⏹ 停止</button>
+    </div>
+  </div>
+  <div class="presets">
+    <span class="lbl">試試看：</span>
+    <button class="chip preset">今天天氣</button>
+    <button class="chip preset">老師說，</button>
+    <button class="chip preset">如果明天下雨</button>
+    <button class="chip preset">注意力讓每個字</button>
+    <button class="chip preset">我喜歡在早上</button>
+  </div>
+  <div id="warn" class="warn"></div>
+
+  <div class="sliders">
+    <div class="slider">
+      <div class="head"><span>產生長度</span><b id="lenVal">18</b></div>
+      <input id="len" type="range" min="1" max="40" value="18">
+    </div>
+    <div class="slider">
+      <div class="head"><span>溫度 Temperature</span><b id="tempVal">1.30</b></div>
+      <input id="temp" type="range" min="20" max="250" value="130">
+    </div>
+    <div class="slider">
+      <div class="head"><span>Top-K 候選</span><b id="topkVal">8</b></div>
+      <input id="topk" type="range" min="1" max="20" value="8">
+    </div>
+    <div class="slider">
+      <div class="head"><span>動畫速度</span><b id="spdVal">1.0×</b></div>
+      <input id="spd" type="range" min="5" max="40" value="10">
+    </div>
+  </div>
+  <div class="toggles">
+    <button id="detailBtn" class="chip" aria-pressed="true">🐢 每個字都完整演示</button>
+    <button id="autoscrollBtn" class="chip" aria-pressed="true">🧭 自動捲動到目前步驟</button>
+  </div>
+</section>
+
+<nav class="stepper" id="stepper" aria-label="流程步驟">
+  <button class="step" data-go="1"><span class="n">1</span>分詞 Tokenization</button>
+  <button class="step" data-go="2"><span class="n">2</span>詞向量 Embedding</button>
+  <button class="step" data-go="3"><span class="n">3</span>注意力 Attention</button>
+  <button class="step" data-go="4"><span class="n">4</span>前饋網路 FFN</button>
+  <button class="step" data-go="5"><span class="n">5</span>產生 Generation</button>
+  <button class="step" data-go="6"><span class="n">6</span>輸出 Output</button>
+  <span class="progressTag" id="genProgress">尚未開始</span>
+  <span class="miniCtrl"><button id="miniPause" class="mini" disabled title="暫停 / 繼續">⏸</button><button id="miniStop" class="mini" disabled title="停止">⏹</button></span>
+</nav>
+
+<!-- 1 ─────────────────────────────────────────── -->
+<section class="stage" id="s1">
+  <h2><span class="tag">Step 1</span>分詞 Tokenization</h2>
+  <p class="lead">模型不認得文字，只認得數字。第一步是把輸入切成一個個 <b>token</b>，再用字典查出每個 token 的 <code>id</code>。
+    這個示範模型用「一個字＝一個 token」的中文字元切法；ChatGPT 這類大模型用的是 BPE，一個 token 可能是半個英文單字。</p>
+  <div class="viz"><div class="tokRow" id="tokRow"></div></div>
+  <div class="readout" id="r1">等待開始…</div>
+</section>
+
+<!-- 2 ─────────────────────────────────────────── -->
+<section class="stage" id="s2">
+  <h2><span class="tag">Step 2</span>詞向量 Embedding</h2>
+  <p class="lead">每個 token id 會去查一張<b>詞向量表</b>，換成一串數字（本模型是 48 維）。這串數字就是這個字的「意思座標」。
+    再加上一個只跟<b>位置</b>有關的向量，模型才知道誰先誰後——底下每一直行就是一個 token 的向量，
+    <span style="color:var(--s2)">橘色為正</span>、<span style="color:var(--s1)">藍色為負</span>、越暗越接近 0。</p>
+  <div class="viz">
+    <div class="canvasRow">
+      <div><div class="colTitle">詞向量 token embedding</div><canvas id="cvTok" role="img" aria-label="詞向量表熱圖，每一直行是一個 token 的 48 維向量"></canvas></div>
+      <div class="op">＋</div>
+      <div><div class="colTitle">位置向量 position</div><canvas id="cvPos" role="img" aria-label="位置向量熱圖"></canvas></div>
+      <div class="op">＝</div>
+      <div><div class="colTitle">輸入向量 x₀</div><canvas id="cvSum" role="img" aria-label="詞向量加位置向量之後的輸入向量熱圖"></canvas></div>
+    </div>
+    <div class="legend">
+      <span class="k"><span class="ramp" id="rampDiv"></span>負 ← 0 → 正</span>
+      <span class="k">每一直行 = 1 個 token，48 格 = 48 個維度</span>
+    </div>
+  </div>
+  <div class="readout" id="r2">等待開始…</div>
+</section>
+
+<!-- 3 ─────────────────────────────────────────── -->
+<section class="stage" id="s3">
+  <h2><span class="tag">Step 3</span>注意力 Self-Attention</h2>
+  <p class="lead">這是 Transformer 的核心。每個字都會問前面所有的字：「你跟我有多相關？」——用 <code>Q·K</code> 算出分數，
+    再經 softmax 變成加總為 1 的權重，然後把大家的 <code>V</code> 按權重混合起來。
+    <b>因果遮罩</b>讓每個字只能看見自己和左邊的字（所以熱圖是下三角形）。</p>
+  <div class="viz">
+    <div class="picker" id="headPicker"></div>
+    <div class="attGrid">
+      <div>
+        <div class="cap">注意力熱圖：第 i 列 = 第 i 個字，看向第 j 個字的權重</div>
+        <canvas id="cvAtt" role="img" aria-label="注意力權重熱圖，右側長條圖列出相同數值"></canvas>
+        <div class="legend"><span class="k"><span class="ramp" id="rampSeq"></span>權重 0 → 1</span><span class="k">右上方空白 = 未來的字，被遮住了</span></div>
+      </div>
+      <div>
+        <div class="cap">目前這個字最在意誰（最後一列）</div>
+        <div class="bars" id="attBars"></div>
+      </div>
+    </div>
+  </div>
+  <div class="readout" id="r3">等待開始…</div>
+</section>
+
+<!-- 4 ─────────────────────────────────────────── -->
+<section class="stage" id="s4">
+  <h2><span class="tag">Step 4</span>前饋網路 Feed-Forward</h2>
+  <p class="lead">注意力負責「跟別人交換情報」，前饋網路負責「自己想一想」。它把 48 維先<b>放大</b>到 128 維，
+    用 GELU 激活函數過濾掉沒用的訊號，再<b>壓回</b> 48 維。多數模型有一半以上的參數都放在這裡，知識大多存在這一層。</p>
+  <div class="viz">
+    <canvas id="cvFfn" role="img" aria-label="前饋網路：48 維輸入、128 維隱藏層激活、48 維輸出"></canvas>
+    <div class="legend">
+      <span class="k"><span class="swatch" style="background:var(--s3)"></span>激活值越大 = 這個「神經元」越興奮</span>
+      <span class="k">顯示的是目前最後一個 token 在第 <b id="ffnLayer">1</b> 層的實際數值</span>
+    </div>
+  </div>
+  <div class="readout" id="r4">等待開始…</div>
+</section>
+
+<!-- 5 ─────────────────────────────────────────── -->
+<section class="stage" id="s5">
+  <h2><span class="tag">Step 5</span>產生下一個字 Generation</h2>
+  <p class="lead">最後一層的向量會跟字典裡<b>每一個字</b>比對，算出分數（logits）。除以<b>溫度</b>後做 softmax 變成機率，
+    只留下最高的 Top-K 個候選，再<b>抽籤</b>選出一個字。溫度越低越保守（幾乎都選第一名），越高越有創意也越容易亂講。</p>
+  <div class="viz">
+    <div class="genGrid">
+      <div>
+        <div class="cap">Top-K 候選字的機率（實際 softmax 結果）</div>
+        <div class="bars" id="genBars"></div>
+      </div>
+      <div>
+        <div class="cap">抽籤：機率越大，佔的格子越寬</div>
+        <div class="roulette">
+          <div class="rouletteTrack" id="roulette"><div class="needle" id="needle"></div></div>
+        </div>
+        <div class="hint" id="genPick">—</div>
+      </div>
+    </div>
+  </div>
+  <div class="readout" id="r5">等待開始…</div>
+</section>
+
+<!-- 6 ─────────────────────────────────────────── -->
+<section class="stage" id="s6">
+  <h2><span class="tag">Step 6</span>輸出並回到第一步 Output</h2>
+  <p class="lead">選中的字被<b>接回輸入的尾巴</b>，然後整個流程再跑一次——這就是「自迴歸（autoregressive）」。
+    你看到 ChatGPT 一個字一個字吐出來，就是這個迴圈在轉。</p>
+  <div class="viz"><div class="outBox" id="outBox"><span class="p" id="outPrompt"></span><span class="g" id="outGen"></span><span class="caret"></span></div></div>
+  <div class="loopNote" id="loopNote"><span class="arrow">↻</span><span>把新的字加回輸入 → 回到 Step 1，產生下一個字</span></div>
+  <div class="readout" id="r6">等待開始…</div>
+</section>
+
+<footer>
+  <p><b>關於這個模型：</b>這是一個從零訓練的 char-level GPT，參數量 <span id="fParams"></span>，
+  訓練語料只有 <span id="fCorpus"></span> 個字的中文短句，所以它只會講很簡單、很像訓練資料的句子——
+  它跟 GPT 這類模型的<b>架構是一樣的</b>，差別只在規模（大模型的參數量是它的<b>一千萬倍以上</b>）。</p>
+  <p>權重以 int8 量化後直接內嵌在這個 HTML 檔裡，推論全部在你的瀏覽器完成，不會連線到任何伺服器。</p>
+</footer>
+</div>
+
+<script type="application/json" id="wdata">__WEIGHTS__</script>
+<script>
+(function () {
+'use strict';
+
+/* ==========================================================
+   0. 載入 + 反量化權重
+   ========================================================== */
+const RAW = JSON.parse(document.getElementById('wdata').textContent);
+const CFG = RAW.cfg;                 // {V,C,L,H,F,B}
+const VOCAB = RAW.vocab;
+const HD = CFG.C / CFG.H;
+const stoi = new Map(VOCAB.map((c, i) => [c, i]));
+
+function deq(t) {
+  const bin = atob(t.d), n = bin.length, out = new Float32Array(n);
+  for (let i = 0; i < n; i++) { let b = bin.charCodeAt(i); if (b > 127) b -= 256; out[i] = b * t.s; }
+  return out;
+}
+const P = { layers: [] };
+P.wte = deq(RAW.tensors.wte); P.wpe = deq(RAW.tensors.wpe);
+for (let l = 0; l < CFG.L; l++) {
+  const o = {};
+  for (const k of ['ln1g','ln1b','wqkv','bqkv','wo','bo','ln2g','ln2b','w1','b1','w2','b2']) o[k] = deq(RAW.tensors['layers.' + l + '.' + k]);
+  P.layers.push(o);
+}
+P.lnfg = deq(RAW.tensors.lnfg); P.lnfb = deq(RAW.tensors.lnfb);
+const N_PARAMS = Object.keys(RAW.tensors).reduce((a, k) => a + atob(RAW.tensors[k].d).length, 0);
+
+/* ==========================================================
+   1. 推論（forward）—— 與訓練用的實作等價，並保留所有中間值
+   ========================================================== */
+function matmul(A, B, M, K, N, C) {
+  C.fill(0);
+  for (let m = 0; m < M; m++) {
+    const ao = m * K, co = m * N;
+    for (let k = 0; k < K; k++) {
+      const a = A[ao + k]; if (a === 0) continue;
+      const bo = k * N;
+      for (let n = 0; n < N; n++) C[co + n] += a * B[bo + n];
+    }
+  }
+}
+const GC = Math.sqrt(2 / Math.PI);
+const gelu = (x) => 0.5 * x * (1 + Math.tanh(GC * (x + 0.044715 * x * x * x)));
+
+function layernorm(x, g, b, T, C, out) {
+  for (let t = 0; t < T; t++) {
+    const o = t * C;
+    let m = 0; for (let c = 0; c < C; c++) m += x[o + c]; m /= C;
+    let v = 0; for (let c = 0; c < C; c++) { const d = x[o + c] - m; v += d * d; } v /= C;
+    const rs = 1 / Math.sqrt(v + 1e-5);
+    for (let c = 0; c < C; c++) out[o + c] = (x[o + c] - m) * rs * g[c] + b[c];
+  }
+}
+
+function forward(tokens) {
+  const C = CFG.C, T = tokens.length, V = CFG.V, F = CFG.F, H = CFG.H;
+  const cache = { T, tokens: tokens.slice(), blocks: [] };
+  const tokv = new Float32Array(T * C), posv = new Float32Array(T * C), emb = new Float32Array(T * C);
+  for (let t = 0; t < T; t++) {
+    const to = tokens[t] * C, po = t * C;
+    for (let c = 0; c < C; c++) { tokv[po + c] = P.wte[to + c]; posv[po + c] = P.wpe[po + c]; emb[po + c] = tokv[po + c] + posv[po + c]; }
+  }
+  cache.tokv = tokv; cache.posv = posv; cache.emb = emb;
+
+  let x = emb;
+  const scale = 1 / Math.sqrt(HD);
+  for (let l = 0; l < CFG.L; l++) {
+    const p = P.layers[l], b = { };
+    const ln1 = new Float32Array(T * C); layernorm(x, p.ln1g, p.ln1b, T, C, ln1);
+    const qkv = new Float32Array(T * 3 * C); matmul(ln1, p.wqkv, T, C, 3 * C, qkv);
+    for (let t = 0; t < T; t++) for (let j = 0; j < 3 * C; j++) qkv[t * 3 * C + j] += p.bqkv[j];
+    const att = new Float32Array(H * T * T), scores = new Float32Array(H * T * T), ao = new Float32Array(T * C);
+    for (let h = 0; h < H; h++) {
+      const qo = h * HD, ko = C + h * HD, vo = 2 * C + h * HD;
+      for (let t = 0; t < T; t++) {
+        const so = h * T * T + t * T;
+        let mx = -Infinity;
+        for (let s = 0; s <= t; s++) {
+          let d = 0; for (let k = 0; k < HD; k++) d += qkv[t * 3 * C + qo + k] * qkv[s * 3 * C + ko + k];
+          d *= scale; scores[so + s] = d; if (d > mx) mx = d;
+        }
+        let sum = 0;
+        for (let s = 0; s <= t; s++) { const e = Math.exp(scores[so + s] - mx); att[so + s] = e; sum += e; }
+        for (let s = 0; s <= t; s++) att[so + s] /= sum;
+        for (let k = 0; k < HD; k++) {
+          let acc = 0; for (let s = 0; s <= t; s++) acc += att[so + s] * qkv[s * 3 * C + vo + k];
+          ao[t * C + h * HD + k] = acc;
+        }
+      }
+    }
+    const proj = new Float32Array(T * C); matmul(ao, p.wo, T, C, C, proj);
+    const res1 = new Float32Array(T * C);
+    for (let t = 0; t < T; t++) for (let c = 0; c < C; c++) res1[t * C + c] = x[t * C + c] + proj[t * C + c] + p.bo[c];
+    const ln2 = new Float32Array(T * C); layernorm(res1, p.ln2g, p.ln2b, T, C, ln2);
+    const fc = new Float32Array(T * F); matmul(ln2, p.w1, T, C, F, fc);
+    const act = new Float32Array(T * F);
+    for (let t = 0; t < T; t++) for (let f = 0; f < F; f++) { const v = fc[t * F + f] + p.b1[f]; fc[t * F + f] = v; act[t * F + f] = gelu(v); }
+    const fo = new Float32Array(T * C); matmul(act, p.w2, T, F, C, fo);
+    const res2 = new Float32Array(T * C);
+    for (let t = 0; t < T; t++) for (let c = 0; c < C; c++) res2[t * C + c] = res1[t * C + c] + fo[t * C + c] + p.b2[c];
+    b.ln2 = ln2; b.att = att; b.scores = scores; b.attout = ao; b.res1 = res1; b.fc = fc; b.act = act; b.fo = fo; b.out = res2; b.xin = x;
+    cache.blocks.push(b);
+    x = res2;
+  }
+  const lnf = new Float32Array(T * C); layernorm(x, P.lnfg, P.lnfb, T, C, lnf);
+  const logits = new Float32Array(V);
+  const lo = (T - 1) * C;
+  for (let v = 0; v < V; v++) { let s = 0; const wo = v * C; for (let c = 0; c < C; c++) s += lnf[lo + c] * P.wte[wo + c]; logits[v] = s; }
+  cache.xfinal = x; cache.lnf = lnf; cache.logits = logits;
+  return cache;
+}
+
+/* ==========================================================
+   2. 顏色
+   ========================================================== */
+function hex2rgb(h) { return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]; }
+function mix(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
+const rgb = (c) => 'rgb(' + (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0) + ')';
+const C_NEG = hex2rgb('#3987e5'), C_POS = hex2rgb('#d95926'), C_MID = hex2rgb('#242430');
+const C_S0 = hex2rgb('#171722'), C_S1 = hex2rgb('#3987e5'), C_S2 = hex2rgb('#cfe2fb');
+const C_G0 = hex2rgb('#171722'), C_G1 = hex2rgb('#199e70'), C_G2 = hex2rgb('#a9e8cd');
+
+// 發散色標：負→藍、0→暗灰、正→橘
+function diverging(v, m) {
+  let t = m > 0 ? v / m : 0; t = Math.max(-1, Math.min(1, t));
+  const a = Math.pow(Math.abs(t), 0.7);
+  return rgb(mix(C_MID, t < 0 ? C_NEG : C_POS, a));
+}
+// 單色階（藍）：0 → 1
+function seqBlue(t) {
+  t = Math.max(0, Math.min(1, t)); t = Math.pow(t, 0.55);
+  return rgb(t < 0.7 ? mix(C_S0, C_S1, t / 0.7) : mix(C_S1, C_S2, (t - 0.7) / 0.3));
+}
+// 單色階（綠）
+function seqGreen(t) {
+  t = Math.max(0, Math.min(1, t)); t = Math.pow(t, 0.6);
+  return rgb(t < 0.7 ? mix(C_G0, C_G1, t / 0.7) : mix(C_G1, C_G2, (t - 0.7) / 0.3));
+}
+function paintRamp(el, fn) {
+  const st = [];
+  for (let i = 0; i <= 10; i++) st.push(fn(i / 10) + ' ' + (i * 10) + '%');
+  el.style.background = 'linear-gradient(90deg,' + st.join(',') + ')';
+}
+
+/* ==========================================================
+   3. 動畫執行器
+   ========================================================== */
+const $ = (id) => document.getElementById(id);
+let runId = 0, paused = false, speed = 1, detail = true, autoscroll = true;
+const CANCEL = { cancel: true };
+const raf = () => new Promise((r) => requestAnimationFrame(r));
+
+async function wait(ms) {
+  const my = runId;
+  let remain = ms, last = performance.now();
+  while (remain > 0) {
+    await raf();
+    if (runId !== my) throw CANCEL;
+    const now = performance.now(), dt = Math.min(80, now - last); last = now;
+    if (!paused) remain -= dt * speed;
+  }
+  if (runId !== my) throw CANCEL;
+}
+function checkAlive(my) { if (runId !== my) throw CANCEL; }
+
+const stageEls = [null, $('s1'), $('s2'), $('s3'), $('s4'), $('s5'), $('s6')];
+const stepEls = Array.from(document.querySelectorAll('.step'));
+function setStage(n) {
+  for (let i = 1; i <= 6; i++) {
+    stageEls[i].classList.toggle('on', i === n);
+    if (i <= n) stageEls[i].classList.add('visited');
+  }
+  stepEls.forEach((e, i) => {
+    e.classList.toggle('active', i + 1 === n);
+    e.classList.toggle('done', i + 1 < n);
+  });
+  if (autoscroll && n) {
+    const el = stageEls[n];
+    const top = el.getBoundingClientRect().top + window.scrollY - 76;
+    window.scrollTo({ top, behavior: 'smooth' });
+  }
+}
+
+/* ==========================================================
+   4. 各步驟的繪圖
+   ========================================================== */
+const DISP = 14;   // 熱圖 / 向量圖最多顯示幾個 token
+const dpr = () => Math.min(2, window.devicePixelRatio || 1);
+function ctx2d(cv, w, h) {
+  const d = dpr();
+  cv.width = Math.round(w * d); cv.height = Math.round(h * d);
+  cv.style.width = w + 'px'; cv.style.height = h + 'px';
+  const g = cv.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0);
+  g.clearRect(0, 0, w, h);
+  return g;
+}
+const showChar = (c) => (c === '\n' ? '⏎' : c === ' ' ? '␣' : c);
+
+/* ---- Step 1 ---- */
+function renderTokens(tokens, nPrompt, revealTo) {
+  const row = $('tokRow');
+  row.innerHTML = '';
+  const start = Math.max(0, tokens.length - 24);
+  if (start > 0) {
+    const more = document.createElement('div');
+    more.className = 'tok in'; more.style.setProperty('--c', 'var(--s7)');
+    more.innerHTML = '<div class="ch">…</div><div class="id">前 ' + start + ' 字</div>';
+    row.appendChild(more);
+  }
+  for (let i = start; i < tokens.length; i++) {
+    const d = document.createElement('div');
+    d.className = 'tok ' + (i < nPrompt ? 'prompt' : 'new');
+    if (i === tokens.length - 1) d.classList.add('cur');
+    d.innerHTML = '<div class="ch">' + showChar(VOCAB[tokens[i]]) + '</div><div class="id">#' + tokens[i] + '</div>';
+    row.appendChild(d);
+    if (revealTo === undefined || i <= revealTo) d.classList.add('in');
+  }
+  return row;
+}
+
+/* ---- Step 2 ---- */
+function drawVecGrid(cv, data, T, C, off, cols, maxAbs, upto) {
+  const cw = 15, ch = 5.4, pad = 16;
+  const w = cols * cw + 2, h = C * ch + pad;
+  const g = ctx2d(cv, w, h);
+  for (let j = 0; j < cols; j++) {
+    const t = off + j;
+    if (upto !== undefined && j > upto) break;
+    for (let c = 0; c < C; c++) {
+      g.fillStyle = diverging(data[t * C + c], maxAbs);
+      g.fillRect(j * cw + 1, c * ch, cw - 2, ch - 0.7);
+    }
+  }
+  g.fillStyle = 'rgba(185,185,198,.85)'; g.font = '10px ui-monospace,monospace'; g.textAlign = 'center';
+  for (let j = 0; j < cols; j++) {
+    if (upto !== undefined && j > upto) break;
+    g.fillText(showChar(VOCAB[curTokens[off + j]]), j * cw + cw / 2, C * ch + 12);
+  }
+}
+
+/* ---- Step 3 ---- */
+function drawAttention(cv, att, T, H, h, off, n, rowsUpto) {
+  const avail = Math.min(430, Math.max(280, (cv.parentElement.clientWidth || 420) - 24));
+  const lab = 18, size = Math.min(34, Math.max(12, Math.floor((avail - lab) / n)));
+  const w = lab + n * size + 2, hgt = lab + n * size + 2;
+  const g = ctx2d(cv, w, hgt);
+  g.font = '10px ui-monospace,monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let i = 0; i < n; i++) {
+    g.fillStyle = 'rgba(150,150,166,.9)';
+    g.fillText(showChar(VOCAB[curTokens[off + i]]), lab + i * size + size / 2, lab / 2 + 2);
+    g.fillText(showChar(VOCAB[curTokens[off + i]]), lab / 2, lab + i * size + size / 2);
+  }
+  for (let i = 0; i < n; i++) {
+    if (rowsUpto !== undefined && i > rowsUpto) break;
+    const ti = off + i, so = h * T * T + ti * T;
+    for (let j = 0; j < n; j++) {
+      const tj = off + j;
+      if (tj > ti) { g.fillStyle = 'rgba(255,255,255,.028)'; }
+      else g.fillStyle = seqBlue(att[so + tj]);
+      g.fillRect(lab + j * size + 0.6, lab + i * size + 0.6, size - 1.2, size - 1.2);
+    }
+  }
+  if (rowsUpto !== undefined && rowsUpto >= 0 && rowsUpto < n) {
+    g.strokeStyle = 'rgba(255,255,255,.75)'; g.lineWidth = 1.4;
+    g.strokeRect(lab + 0.3, lab + rowsUpto * size + 0.3, n * size - 0.6, size - 0.6);
+  }
+}
+
+function renderBars(host, items, colorFn, animate) {
+  host.innerHTML = '';
+  items.forEach((it) => {
+    const row = document.createElement('div'); row.className = 'bar';
+    const lab = document.createElement('div'); lab.className = 'lab'; lab.textContent = it.label;
+    const track = document.createElement('div'); track.className = 'track';
+    const fill = document.createElement('div'); fill.className = 'fill';
+    fill.style.background = colorFn(it);
+    track.appendChild(fill);
+    const val = document.createElement('div'); val.className = 'val'; val.textContent = it.text;
+    row.appendChild(lab); row.appendChild(track); row.appendChild(val);
+    host.appendChild(row);
+    const w = Math.max(1.5, it.frac * 100);
+    if (animate) requestAnimationFrame(() => { fill.style.width = w + '%'; });
+    else fill.style.width = w + '%';
+  });
+}
+
+/* ---- Step 4 ---- */
+function drawFFN(cv, xin, act, xout, C, F, phase) {
+  const width = Math.min(880, Math.max(420, (cv.parentElement.clientWidth || 600) - 28));
+  const h = 200, g = ctx2d(cv, width, h);
+  const colW = 26, midW = Math.max(180, width - 2 * colW - 150);
+  const x0 = 8, x1 = x0 + colW + 62, x2 = x1 + midW + 62;
+  const cellH = (h - 34) / C;
+  let mIn = 1e-6, mAct = 1e-6, mOut = 1e-6;
+  for (let i = 0; i < C; i++) { mIn = Math.max(mIn, Math.abs(xin[i])); mOut = Math.max(mOut, Math.abs(xout[i])); }
+  for (let i = 0; i < F; i++) mAct = Math.max(mAct, Math.abs(act[i]));
+
+  // 連線（隨 phase 淡入）
+  const barW = midW / F;
+  if (phase > 0) {
+    g.globalAlpha = 0.16 * Math.min(1, phase * 1.4);
+    g.strokeStyle = '#3987e5'; g.lineWidth = 0.5;
+    for (let i = 0; i < C; i += 2) {
+      for (let f = 0; f < F; f += 11) {
+        g.beginPath();
+        g.moveTo(x0 + colW, 26 + i * cellH + cellH / 2);
+        g.lineTo(x1 + f * barW, 26 + (h - 34) / 2);
+        g.stroke();
+      }
+    }
+    g.globalAlpha = 1;
+  }
+  if (phase > 1.4) {
+    g.globalAlpha = 0.16 * Math.min(1, (phase - 1.4) * 1.4);
+    g.strokeStyle = '#199e70'; g.lineWidth = 0.5;
+    for (let i = 0; i < C; i += 2) {
+      for (let f = 0; f < F; f += 11) {
+        g.beginPath();
+        g.moveTo(x1 + f * barW, 26 + (h - 34) / 2);
+        g.lineTo(x2, 26 + i * cellH + cellH / 2);
+        g.stroke();
+      }
+    }
+    g.globalAlpha = 1;
+  }
+  // 左：輸入 48 維
+  for (let i = 0; i < C; i++) {
+    g.fillStyle = diverging(xin[i], mIn);
+    g.fillRect(x0, 26 + i * cellH, colW, Math.max(1, cellH - 0.6));
+  }
+  // 中：128 個隱藏神經元（激活後）
+  const revealF = phase < 1 ? Math.floor(F * Math.max(0, phase)) : F;
+  const midH = h - 34;
+  for (let f = 0; f < revealF; f++) {
+    const a = act[f] / mAct;
+    const bh = Math.max(1.5, Math.abs(a) * midH * 0.92);
+    g.fillStyle = a >= 0 ? seqGreen(Math.abs(a)) : 'rgba(217,89,38,.55)';
+    g.fillRect(x1 + f * barW, 26 + midH / 2 - (a >= 0 ? bh : 0), Math.max(1, barW - 0.8), bh);
+  }
+  g.strokeStyle = 'rgba(255,255,255,.14)'; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(x1, 26 + midH / 2 + .5); g.lineTo(x1 + midW, 26 + midH / 2 + .5); g.stroke();
+  // 右：輸出 48 維
+  const revealO = phase > 1.4 ? Math.min(1, (phase - 1.4) / 0.6) : 0;
+  for (let i = 0; i < C; i++) {
+    g.globalAlpha = revealO;
+    g.fillStyle = diverging(xout[i], mOut);
+    g.fillRect(x2, 26 + i * cellH, colW, Math.max(1, cellH - 0.6));
+    g.globalAlpha = 1;
+  }
+  g.fillStyle = 'rgba(185,185,198,.9)'; g.font = '11px ui-monospace,monospace'; g.textAlign = 'left';
+  g.fillText('輸入 48 維', x0, 14);
+  g.fillText('隱藏層 128 維（GELU 之後）', x1, 14);
+  g.textAlign = 'right'; g.fillText('輸出 48 維', x2 + colW, 14);
+}
+
+/* ==========================================================
+   5. 主流程
+   ========================================================== */
+let curTokens = [];
+let attLayer = 0, attHead = 0, lastCache = null;
+
+function buildHeadPicker() {
+  const host = $('headPicker');
+  host.innerHTML = '';
+  for (let l = 0; l < CFG.L; l++) {
+    for (let h = 0; h < CFG.H; h++) {
+      const b = document.createElement('button');
+      b.className = 'chip'; b.textContent = '第 ' + (l + 1) + ' 層 · 頭 ' + (h + 1);
+      b.setAttribute('aria-pressed', String(l === attLayer && h === attHead));
+      b.onclick = () => {
+        attLayer = l; attHead = h;
+        Array.from(host.children).forEach((c, i) => c.setAttribute('aria-pressed', String(i === l * CFG.H + h)));
+        if (lastCache) redrawAttention(lastCache);
+      };
+      host.appendChild(b);
+    }
+  }
+}
+function attWindow(T) {
+  const n = Math.min(DISP, T);
+  return { off: T - n, n };
+}
+function redrawAttention(cache, rowsUpto) {
+  const T = cache.T, { off, n } = attWindow(T);
+  const att = cache.blocks[attLayer].att;
+  drawAttention($('cvAtt'), att, T, CFG.H, attHead, off, n, rowsUpto === undefined ? n - 1 : rowsUpto);
+  const so = attHead * T * T + (T - 1) * T;
+  const items = [];
+  for (let s = 0; s < T; s++) items.push({ i: s, w: att[so + s] });
+  items.sort((a, b) => b.w - a.w);
+  renderBars($('attBars'), items.slice(0, 7).map((it) => ({
+    label: showChar(VOCAB[cache.tokens[it.i]]),
+    frac: it.w,
+    text: (it.w * 100).toFixed(1) + '%',
+  })), () => 'var(--s1)', true);
+  const best = items[0];
+  $('r3').innerHTML = '在第 <b>' + (attLayer + 1) + '</b> 層的第 <b>' + (attHead + 1) + '</b> 個注意力頭裡，「<b>' +
+    showChar(VOCAB[cache.tokens[T - 1]]) + '</b>」把 <span class="num">' + (best.w * 100).toFixed(1) +
+    '%</span> 的注意力放在「<b>' + showChar(VOCAB[cache.tokens[best.i]]) + '</b>」上。' +
+    '每一層有 <b>' + CFG.H + '</b> 個頭同時在看不同的關係，可以按上面的按鈕切換。';
+}
+
+function softmaxTopK(logits, temperature, K) {
+  const V = logits.length;
+  const idx = Array.from({ length: V }, (_, i) => i);
+  idx.sort((a, b) => logits[b] - logits[a]);
+  const keep = idx.slice(0, K);
+  let mx = -Infinity;
+  for (const i of keep) mx = Math.max(mx, logits[i] / temperature);
+  let sum = 0;
+  const probs = keep.map((i) => { const e = Math.exp(logits[i] / temperature - mx); sum += e; return e; });
+  for (let i = 0; i < probs.length; i++) probs[i] /= sum;
+  return { keep, probs, full: idx };
+}
+
+// 對整個字典做 softmax，回傳熵（bits）——用來說明模型「有多猶豫」
+function entropyBits(logits, temperature) {
+  let mx = -Infinity;
+  for (let i = 0; i < logits.length; i++) mx = Math.max(mx, logits[i] / temperature);
+  let sum = 0;
+  const e = new Float64Array(logits.length);
+  for (let i = 0; i < logits.length; i++) { e[i] = Math.exp(logits[i] / temperature - mx); sum += e[i]; }
+  let H = 0;
+  for (let i = 0; i < e.length; i++) { const p = e[i] / sum; if (p > 1e-12) H -= p * Math.log2(p); }
+  return H;
+}
+
+function fmt(x, d) { return (x >= 0 ? ' ' : '') + x.toFixed(d === undefined ? 2 : d); }
+function vecPreview(arr, off, n) {
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(fmt(arr[off + i]));
+  return '[' + out.join(', ') + ', …]';
+}
+
+async function runOnce(tokens, nPrompt, isFirst) {
+  const my = runId;
+  const d = isFirst || detail ? 1 : 0.34;
+  const T = tokens.length;
+  curTokens = tokens;
+  const cache = forward(tokens);
+  lastCache = cache;
+
+  /* ---- Step 1：分詞 ---- */
+  setStage(1);
+  const row = renderTokens(tokens, nPrompt, isFirst ? -1 : tokens.length);
+  $('r1').innerHTML = '把 <b>' + T + '</b> 個字轉成 id 序列：<span class="num">[' +
+    tokens.slice(Math.max(0, T - 12)).join(', ') + ']</span>　字典大小 <span class="num">' + CFG.V + '</span> 個字。';
+  if (isFirst) {
+    const chips = Array.from(row.querySelectorAll('.tok'));
+    for (const c of chips) { c.classList.add('in'); await wait(90); }
+  }
+  await wait(700 * d);
+
+  /* ---- Step 2：詞向量 ---- */
+  setStage(2);
+  const { off, n } = attWindow(T);
+  let maxAbs = 0;
+  for (let i = 0; i < T * CFG.C; i++) maxAbs = Math.max(maxAbs, Math.abs(cache.emb[i]));
+  const steps = isFirst ? n : 1;
+  for (let k = 0; k < steps; k++) {
+    const upto = isFirst ? k : n - 1;
+    drawVecGrid($('cvTok'), cache.tokv, T, CFG.C, off, n, maxAbs, upto);
+    drawVecGrid($('cvPos'), cache.posv, T, CFG.C, off, n, maxAbs, upto);
+    drawVecGrid($('cvSum'), cache.emb, T, CFG.C, off, n, maxAbs, upto);
+    if (isFirst) await wait(110);
+  }
+  const lastOff = (T - 1) * CFG.C;
+  $('r2').innerHTML = '最後一個字「<b>' + showChar(VOCAB[tokens[T - 1]]) + '</b>」的向量前 6 維：' +
+    '<span class="num">' + vecPreview(cache.emb, lastOff, 6) + '</span>　' +
+    '每個字都被壓縮成 <b>' + CFG.C + '</b> 個數字；這張表有 <span class="num">' + CFG.V + '×' + CFG.C + ' = ' + (CFG.V * CFG.C).toLocaleString() + '</span> 個參數。';
+  await wait(800 * d);
+
+  /* ---- Step 3：注意力 ---- */
+  setStage(3);
+  if (isFirst) {
+    for (let i = 0; i < n; i++) { redrawAttention(cache, i); await wait(150); }
+  } else {
+    redrawAttention(cache);
+  }
+  await wait(900 * d);
+
+  /* ---- Step 4：前饋網路 ---- */
+  setStage(4);
+  const L = CFG.L - 1;
+  $('ffnLayer').textContent = String(L + 1);
+  const blk = cache.blocks[L];
+  const xin = blk.ln2.subarray((T - 1) * CFG.C, T * CFG.C);
+  const act = blk.act.subarray((T - 1) * CFG.F, T * CFG.F);
+  const xout = blk.fo.subarray((T - 1) * CFG.C, T * CFG.C);
+  const frames = isFirst ? 26 : 6;
+  for (let f = 0; f <= frames; f++) {
+    drawFFN($('cvFfn'), xin, act, xout, CFG.C, CFG.F, (f / frames) * 2);
+    await wait(isFirst ? 34 : 22);
+  }
+  let topN = 0, killed = 0;
+  for (let f = 0; f < CFG.F; f++) { if (act[f] > act[topN]) topN = f; if (act[f] < 0.01) killed++; }
+  $('r4').innerHTML = '最活躍的是第 <span class="num">' + topN + '</span> 號神經元（激活值 <span class="num">' + act[topN].toFixed(2) +
+    '</span>），有 <b>' + killed + '/' + CFG.F + '</b> 個神經元幾乎沒被點亮——GELU 把它們關掉了。' +
+    '這一層的參數量是 <span class="num">' + (2 * CFG.C * CFG.F).toLocaleString() + '</span>，佔整個模型的一大半。';
+  await wait(800 * d);
+
+  /* ---- Step 5：產生 ---- */
+  setStage(5);
+  const temperature = parseInt($('temp').value, 10) / 100;
+  const K = parseInt($('topk').value, 10);
+  const { keep, probs, full } = softmaxTopK(cache.logits, temperature, K);
+  renderBars($('genBars'), keep.map((v, i) => ({
+    label: showChar(VOCAB[v]), frac: probs[i], text: (probs[i] * 100).toFixed(1) + '%',
+  })), () => 'var(--s1)', true);
+
+  const track = $('roulette');
+  Array.from(track.querySelectorAll('.seg')).forEach((e) => e.remove());
+  keep.forEach((v, i) => {
+    const seg = document.createElement('div');
+    seg.className = 'seg';
+    seg.style.background = seqBlue(0.25 + 0.75 * (probs[i] / probs[0]));
+    seg.title = showChar(VOCAB[v]) + ' ' + (probs[i] * 100).toFixed(1) + '%';
+    track.appendChild(seg);
+    requestAnimationFrame(() => { seg.style.width = (probs[i] * 100) + '%'; });
+  });
+  await wait(620 * d);
+
+  const r = Math.random();
+  let acc = 0, pick = 0;
+  for (let i = 0; i < probs.length; i++) { acc += probs[i]; if (r <= acc) { pick = i; break; } pick = i; }
+  const needle = $('needle');
+  needle.classList.add('show');
+  needle.style.left = (r * 100) + '%';
+  const chosen = keep[pick];
+  $('genPick').innerHTML = '亂數 <span class="num">' + r.toFixed(3) + '</span> → 選中「<b style="color:#ffd28a">' +
+    showChar(VOCAB[chosen]) + '</b>」';
+  const greedy = full[0];
+  const H = entropyBits(cache.logits, temperature);
+  const mood = H < 0.15 ? '幾乎沒有懸念' : H < 1 ? '有點猶豫' : H < 2.5 ? '相當不確定' : '完全不知道要接什麼';
+  $('r5').innerHTML = '最高分的是「<b>' + showChar(VOCAB[greedy]) + '</b>」（logit <span class="num">' + cache.logits[greedy].toFixed(2) +
+    '</span>，機率 <span class="num">' + (probs[keep.indexOf(greedy)] * 100 || 0).toFixed(1) + '%</span>）；' +
+    '溫度 <span class="num">' + temperature.toFixed(2) + '</span> 之下抽到的是「<b>' + showChar(VOCAB[chosen]) + '</b>」。' +
+    '模型一次要對 <span class="num">' + CFG.V + '</span> 個字算分數，只留下 Top-' + K + ' 當候選。' +
+    '　這一步的不確定性（熵）是 <span class="num">' + H.toFixed(2) + ' bits</span>——' + mood + '。';
+  await wait(900 * d);
+
+  /* ---- Step 6：輸出 ---- */
+  setStage(6);
+  const gen = $('outGen');
+  const span = document.createElement('span');
+  span.className = 'last';
+  span.textContent = showChar(VOCAB[chosen]);
+  Array.from(gen.querySelectorAll('.last')).forEach((e) => e.classList.remove('last'));
+  gen.appendChild(span);
+  $('r6').innerHTML = '新的字被接到序列尾巴，序列長度變成 <b>' + (T + 1) + '</b>，然後整個流程重跑一次。' +
+    '這就是自迴歸生成：<span class="num">P(下一個字 | 前面所有字)</span>。';
+  $('loopNote').classList.add('pulse');
+  await wait(520 * d);
+  $('loopNote').classList.remove('pulse');
+  checkAlive(my);
+  return chosen;
+}
+
+/* ==========================================================
+   6. 控制
+   ========================================================== */
+function sanitize(text) {
+  const kept = [], dropped = [];
+  for (const ch of Array.from(text)) {
+    if (stoi.has(ch)) kept.push(stoi.get(ch)); else dropped.push(ch);
+  }
+  return { kept, dropped };
+}
+
+let running = false;
+async function start() {
+  const { kept, dropped } = sanitize($('prompt').value.trim());
+  const warn = $('warn');
+  if (dropped.length) {
+    warn.textContent = '⚠ 這個迷你模型的字典只有 ' + CFG.V + ' 個字，以下字不在字典裡，已被略過：' +
+      Array.from(new Set(dropped)).join(' ') + '（試試上面的範例句）';
+    warn.classList.add('show');
+  } else warn.classList.remove('show');
+  if (!kept.length) {
+    warn.textContent = '⚠ 請輸入至少一個模型認得的字，例如「今天天氣」。';
+    warn.classList.add('show');
+    return;
+  }
+
+  runId++;
+  const my = runId;
+  running = true; paused = false;
+  $('runBtn').disabled = true; $('stopBtn').disabled = false; $('pauseBtn').disabled = false;
+  $('pauseBtn').textContent = '⏸ 暫停';
+  syncCtrl();
+
+  const nPrompt = kept.length;
+  let tokens = kept.slice();
+  $('outPrompt').textContent = tokens.map((t) => showChar(VOCAB[t])).join('');
+  $('outGen').innerHTML = '';
+  $('needle').classList.remove('show');
+  const N = parseInt($('len').value, 10);
+  for (let i = 1; i <= 6; i++) stageEls[i].classList.remove('visited');
+
+  try {
+    for (let i = 0; i < N; i++) {
+      $('genProgress').textContent = '正在產生第 ' + (i + 1) + ' / ' + N + ' 個字';
+      const ctx = tokens.slice(-CFG.B);
+      const nP = Math.max(0, nPrompt - (tokens.length - ctx.length));
+      const next = await runOnce(ctx, nP, i === 0);
+      tokens.push(next);
+      checkAlive(my);
+      await wait(160);
+    }
+    $('genProgress').textContent = '✓ 產生完畢，共 ' + N + ' 個字';
+    for (let i = 1; i <= 6; i++) stageEls[i].classList.add('visited');
+    $('r6').innerHTML += ' <b>／ 產生完畢。</b>';
+  } catch (e) {
+    if (e !== CANCEL) throw e;
+  } finally {
+    if (runId === my) {
+      running = false;
+      $('runBtn').disabled = false; $('stopBtn').disabled = true; $('pauseBtn').disabled = true;
+      syncCtrl();
+    }
+  }
+}
+function stop() {
+  runId++;
+  running = false; paused = false;
+  $('genProgress').textContent = '已停止';
+  for (let i = 1; i <= 6; i++) stageEls[i].classList.add('visited');
+  if (lastCache) redrawAttention(lastCache);
+  $('runBtn').disabled = false; $('stopBtn').disabled = true; $('pauseBtn').disabled = true;
+  $('pauseBtn').textContent = '⏸ 暫停';
+  syncCtrl();
+}
+
+function syncCtrl() {
+  $('miniPause').disabled = $('pauseBtn').disabled;
+  $('miniStop').disabled = $('stopBtn').disabled;
+  $('miniPause').textContent = paused ? '▶' : '⏸';
+}
+$('runBtn').onclick = start;
+$('stopBtn').onclick = stop;
+$('pauseBtn').onclick = function () {
+  paused = !paused;
+  this.textContent = paused ? '▶ 繼續' : '⏸ 暫停';
+  syncCtrl();
+};
+$('miniPause').onclick = () => $('pauseBtn').click();
+$('miniStop').onclick = () => $('stopBtn').click();
+document.querySelectorAll('.preset').forEach((b) => {
+  b.onclick = () => { $('prompt').value = b.textContent; if (!running) start(); };
+});
+$('len').oninput = function () { $('lenVal').textContent = this.value; };
+$('temp').oninput = function () { $('tempVal').textContent = (this.value / 100).toFixed(2); };
+$('topk').oninput = function () { $('topkVal').textContent = this.value; };
+$('spd').oninput = function () { speed = this.value / 10; $('spdVal').textContent = speed.toFixed(1) + '×'; };
+$('detailBtn').onclick = function () { detail = !detail; this.setAttribute('aria-pressed', String(detail)); this.textContent = detail ? '🐢 每個字都完整演示' : '🐇 只完整演示第一個字'; };
+$('autoscrollBtn').onclick = function () { autoscroll = !autoscroll; this.setAttribute('aria-pressed', String(autoscroll)); };
+stepEls.forEach((e) => { e.onclick = () => { const n = +e.dataset.go; stageEls[n].scrollIntoView({ block: 'start' }); }; });
+window.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') { e.preventDefault(); if (running) $('pauseBtn').click(); else start(); }
+  if (e.key === 'Escape') stop();
+});
+window.addEventListener('resize', () => { if (lastCache) { const T = lastCache.T, L = CFG.L - 1, b = lastCache.blocks[L];
+  drawFFN($('cvFfn'), b.ln2.subarray((T - 1) * CFG.C, T * CFG.C), b.act.subarray((T - 1) * CFG.F, T * CFG.F), b.fo.subarray((T - 1) * CFG.C, T * CFG.C), CFG.C, CFG.F, 2); } });
+
+/* ---- 初始化 ---- */
+paintRamp($('rampDiv'), (t) => diverging((t - 0.5) * 2, 1));
+paintRamp($('rampSeq'), seqBlue);
+buildHeadPicker();
+const specs = [
+  ['參數量', N_PARAMS.toLocaleString()],
+  ['層數', CFG.L + ' layers'],
+  ['注意力頭', CFG.H + ' heads'],
+  ['向量維度', 'd=' + CFG.C],
+  ['字典', CFG.V + ' tokens'],
+  ['上下文', CFG.B + ' tokens'],
+];
+$('specs').innerHTML = specs.map((s) => '<span class="spec">' + s[0] + ' <b>' + s[1] + '</b></span>').join('');
+$('fParams').textContent = N_PARAMS.toLocaleString();
+$('fCorpus').textContent = '__CORPUS_CHARS__';
+
+// 先靜態畫一次，讓頁面一打開就有東西看
+(function preview() {
+  const toks = sanitize('今天天氣很好').kept;
+  curTokens = toks;
+  const c = forward(toks);
+  lastCache = c;
+  renderTokens(toks, toks.length);
+  const T = c.T, { off, n } = attWindow(T);
+  let m = 0; for (let i = 0; i < T * CFG.C; i++) m = Math.max(m, Math.abs(c.emb[i]));
+  drawVecGrid($('cvTok'), c.tokv, T, CFG.C, off, n, m);
+  drawVecGrid($('cvPos'), c.posv, T, CFG.C, off, n, m);
+  drawVecGrid($('cvSum'), c.emb, T, CFG.C, off, n, m);
+  redrawAttention(c);
+  const L = CFG.L - 1, b = c.blocks[L];
+  drawFFN($('cvFfn'), b.ln2.subarray((T - 1) * CFG.C, T * CFG.C), b.act.subarray((T - 1) * CFG.F, T * CFG.F), b.fo.subarray((T - 1) * CFG.C, T * CFG.C), CFG.C, CFG.F, 2);
+  const { keep, probs } = softmaxTopK(c.logits, 1.3, 8);
+  renderBars($('genBars'), keep.map((v, i) => ({ label: showChar(VOCAB[v]), frac: probs[i], text: (probs[i] * 100).toFixed(1) + '%' })), () => 'var(--s1)', false);
+  $('outPrompt').textContent = '今天天氣很好';
+  document.querySelectorAll('.readout').forEach((e) => { e.innerHTML = '👆 按「開始演示」就會看到這一步的實際運算。'; });
+  for (let i = 1; i <= 6; i++) stageEls[i].classList.add('visited');
+})();
+})();
+</script>
+</body>
+</html>
