@@ -20,9 +20,52 @@ const cfg = {
   B: num('BLOCK', 48),    // 上下文長度
 };
 if (cfg.C % cfg.H) throw new Error('DIM 必須能被 HEADS 整除');
+
+// RESUME=1 時，從既有的 weights.json 接著訓練（微調），而不是從零開始。
+// 語料改過、字典多了幾個字也沒關係：舊字的詞向量會照「字」搬過來，新字才隨機初始化。
+const RESUME = process.env.RESUME ? String(process.env.RESUME) : '';
+const ckptPath = RESUME && RESUME !== '1' ? RESUME : __dirname + '/weights.json';
+
+function loadCheckpoint(model) {
+  const R = JSON.parse(fs.readFileSync(ckptPath, 'utf8'));
+  for (const k of ['C', 'L', 'H', 'F', 'B']) {
+    if (R.cfg[k] !== cfg[k]) {
+      throw new Error(`續訓失敗：檢查點的 ${k}=${R.cfg[k]}，這次要的是 ${cfg[k]}。` +
+        `續訓不能改模型結構，請用 ${k === 'C' ? 'DIM' : k === 'L' ? 'LAYERS' : k === 'H' ? 'HEADS' : k === 'F' ? 'FF' : 'BLOCK'}=${R.cfg[k]}，或拿掉 RESUME 從零訓練。`);
+    }
+  }
+  const deq = (t) => {
+    const b = Buffer.from(t.d, 'base64'), o = new Float32Array(b.length);
+    for (let i = 0; i < b.length; i++) { let x = b[i]; if (x > 127) x -= 256; o[i] = x * t.s; }
+    return o;
+  };
+  const oldIdx = new Map(R.vocab.map((c, i) => [c, i]));
+  let kept = 0;
+  for (const [name, arr] of paramList(model)) {
+    const src = deq(R.tensors[name]);
+    if (name === 'wte') {
+      // 逐「字」搬：舊字典有的就沿用，沒有的維持隨機初始化
+      for (let i = 0; i < chars.length; i++) {
+        const j = oldIdx.get(chars[i]);
+        if (j === undefined) continue;
+        for (let c = 0; c < cfg.C; c++) arr[i * cfg.C + c] = src[j * cfg.C + c];
+        kept++;
+      }
+    } else {
+      if (src.length !== arr.length) throw new Error(`續訓失敗：張量 ${name} 大小不符`);
+      arr.set(src);
+    }
+  }
+  const fresh = chars.length - kept;
+  console.log(`續訓：載入 ${ckptPath}`);
+  console.log(`  字典 ${R.vocab.length} → ${chars.length}，沿用 ${kept} 個字的詞向量，${fresh} 個新字隨機初始化`);
+  if (fresh > 40) console.log(`  ⚠ 新字有 ${fresh} 個，數量偏多，續訓可能不夠——考慮拿掉 RESUME 從零訓練`);
+}
+
 const model = makeModel(cfg);
 const params = paramList(model);
 console.log('params', params.reduce((a, [, x]) => a + x.length, 0));
+if (RESUME) loadCheckpoint(model);
 
 const grads = makeGrads(model);
 const m = {}, v = {};
@@ -30,9 +73,10 @@ for (const [name, arr] of params) { m[name] = new Float32Array(arr.length); v[na
 
 const T = cfg.B;
 const BATCH = num('BATCH', 12);
-const STEPS = num('STEPS', 7000);
-const LR = process.env.LR ? parseFloat(process.env.LR) : 2.5e-3;
-const WARM = 150, MINLR = 1.5e-4, WD = 0.02;
+// 續訓的預設值不一樣：步數少、學習率小，才不會把原本學會的東西洗掉
+const STEPS = num('STEPS', RESUME ? 900 : 7000);
+const LR = process.env.LR ? parseFloat(process.env.LR) : (RESUME ? 4e-4 : 2.5e-3);
+const WARM = RESUME ? 40 : 150, MINLR = RESUME ? 5e-5 : 1.5e-4, WD = 0.02;
 const beta1 = 0.9, beta2 = 0.95, eps = 1e-8;
 
 let seed = 7;
@@ -42,6 +86,26 @@ const cache = {};
 const dl = new Float32Array(T * cfg.V);
 const t0 = Date.now();
 let best = Infinity;
+
+// 續訓前先量一次 loss：如果檢查點有正確載入，這個值會接近它當初訓練到的 loss，
+// 而不是從零開始的 ~6.5。這是確認「真的接上了」最直接的證據。
+function evalLoss(n) {
+  let s = 0, sd = 12345;
+  const r = () => { sd = (sd * 1103515245 + 12345) & 0x7fffffff; return sd / 0x7fffffff; };
+  for (let b = 0; b < n; b++) {
+    const i = Math.floor(r() * (data.length - T - 1));
+    forward(model, Array.from(data.subarray(i, i + T)), cache);
+    s += crossEntropyAndDLogits(model, cache, Array.from(data.subarray(i + 1, i + T + 1)), dl);
+  }
+  return s / n;
+}
+if (RESUME) {
+  console.log(`  載入後的 loss ${evalLoss(24).toFixed(4)}（從零開始約 ${Math.log(cfg.V).toFixed(2)}）`);
+  const prev = __dirname + '/weights.prev.json';
+  fs.copyFileSync(ckptPath, prev);
+  console.log(`  原檢查點已備份到 ${prev}`);
+}
+console.log(`設定：STEPS=${STEPS} LR=${LR} BATCH=${BATCH} ${RESUME ? '(續訓)' : '(從零訓練)'}`);
 
 for (let step = 1; step <= STEPS; step++) {
   for (const [name] of params) grads[name].fill(0);
