@@ -138,12 +138,17 @@ function gen(prompt, n, temp) {
   return out.replace(/\n/g, '⏎');
 }
 
-const argv = process.argv.slice(2);
-const temp = argv.length && !isNaN(parseFloat(argv[0])) ? parseFloat(argv.shift()) : 1.3;
-const prompts = argv.length ? argv : ['今天天氣', '今天天氣很', '老師說，', '如果明天', '我喜歡在早上'];
+// 讓其他工具（例如 rag_demo.js）可以直接用這裡的推論核心
+module.exports = { CFG, VOCAB, stoi, show, fwd, probs, gen };
 
-corpusReport();
-console.log(`=== 下一個字的機率分布（溫度 ${temp}）===`);
-for (const s of prompts) report(s, temp);
-console.log(`\n=== 實際續寫（溫度 ${temp}）===`);
-for (const s of prompts.slice(0, 3)) console.log('  ' + gen(s, 26, temp));
+if (require.main === module) {
+  const argv = process.argv.slice(2);
+  const temp = argv.length && !isNaN(parseFloat(argv[0])) ? parseFloat(argv.shift()) : 1.3;
+  const prompts = argv.length ? argv : ['今天天氣', '今天天氣很', '老師說，', '如果明天', '我喜歡在早上'];
+
+  corpusReport();
+  console.log(`=== 下一個字的機率分布（溫度 ${temp}）===`);
+  for (const s of prompts) report(s, temp);
+  console.log(`\n=== 實際續寫（溫度 ${temp}）===`);
+  for (const s of prompts.slice(0, 3)) console.log('  ' + gen(s, 26, temp));
+}
