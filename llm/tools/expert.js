@@ -13,6 +13,27 @@
 
 const epi = require('./epi_calc.js');
 const fin = require('./fin_calc.js');
+const data = require('./epi_data.js');
+
+/* ----------------------------------------------------------
+   生產資料：要先掛上資料集，這些工具才會有東西可查。
+   把資料留在呼叫端載入（而不是寫死路徑），是因為它一定在廠內、
+   而且每家的檔案位置都不一樣。
+   ---------------------------------------------------------- */
+let DATA = null;
+function attachData(pathsOrDataset) {
+  DATA = typeof pathsOrDataset === 'string' || Array.isArray(pathsOrDataset)
+    ? data.load(pathsOrDataset) : pathsOrDataset;
+  return DATA;
+}
+function ds() {
+  if (!DATA) {
+    throw new Error('還沒有掛上生產資料。先呼叫 attachData(檔案路徑) 或用 node expert.js --data <檔案> ...');
+  }
+  return DATA;
+}
+// 生產資料的工具都吃扁平參數（機台、產品、起訖日），這裡組成 filter
+const F = (machine, product, from, to) => ({ machine, product, from, to });
 
 const N = (d) => ({ type: 'number', description: d });
 const S = (d) => ({ type: 'string', description: d });
@@ -175,6 +196,76 @@ const TOOLS = [
     desc: '通膨後的實質購買力',
     params: { amount: N('金額'), inflation: N('年通膨率'), years: N('年數') },
     order: ['amount', 'inflation', 'years'] },
+
+  // ── EPI 生產資料（要先 attachData）────────────────────────
+  // 這些不是「算」出來的，是「查」出來的——第三層裡的另一半。
+  // 一律吃 machine / product / from / to，逼模型先講清楚要看哪一群，
+  // 而不是把所有機台混在一起要一個數字。
+  { name: 'runStats', domain: '生產資料', fn: (metric, machine, product, from, to) =>
+      data.runStats(ds(), F(machine, product, from, to), metric),
+    desc: '某個量測值的統計：筆數、平均、標準差、四分位、最大最小',
+    params: {
+      metric: S('量測欄位，如 波長、厚度、成長溫度'),
+      machine: S('機台，省略＝全部（預設）'), product: S('產品，省略＝全部（預設）'),
+      from: S('起始日 YYYY-MM-DD（預設不限）'), to: S('結束日 YYYY-MM-DD（預設不限）') },
+    order: ['metric', 'machine', 'product', 'from', 'to'] },
+
+  { name: 'processCapability', domain: '生產資料', fn: (metric, lsl, usl, machine, product, from, to) =>
+      data.cpk(ds(), F(machine, product, from, to), metric, lsl, usl),
+    desc: '製程能力 Cp / Cpk（資料筆數不足會明講，不會假裝算得準）',
+    params: {
+      metric: S('量測欄位'), lsl: N('規格下限'), usl: N('規格上限'),
+      machine: S('機台，省略＝全部（預設）'), product: S('產品，省略＝全部（預設）'),
+      from: S('起始日（預設不限）'), to: S('結束日（預設不限）') },
+    order: ['metric', 'lsl', 'usl', 'machine', 'product', 'from', 'to'] },
+
+  { name: 'compareGroups', domain: '生產資料', fn: (metric, by, product, from, to) =>
+      data.groupStats(ds(), F(null, product, from, to), metric, by || 'machine'),
+    desc: '分組比較：各機台／產品／每日／每月的平均與標準差，並給出組間最大差距',
+    params: {
+      metric: S('量測欄位'), by: S('分組依據 machine / product / day / month（預設 machine）'),
+      product: S('產品，省略＝全部（預設）'),
+      from: S('起始日（預設不限）'), to: S('結束日（預設不限）') },
+    order: ['metric', 'by', 'product', 'from', 'to'] },
+
+  { name: 'spcCheck', domain: '生產資料', fn: (metric, machine, product, from, to) =>
+      data.spcRules(ds(), F(machine, product, from, to), metric),
+    desc: '管制圖判異：單點超三倍標準差、二/三倍區判定、連續七點同側或持續上升下降',
+    params: {
+      metric: S('量測欄位'),
+      machine: S('機台，省略＝全部（預設）'), product: S('產品，省略＝全部（預設）'),
+      from: S('起始日（預設不限）'), to: S('結束日（預設不限）') },
+    order: ['metric', 'machine', 'product', 'from', 'to'] },
+
+  { name: 'findOutliers', domain: '生產資料', fn: (metric, k, machine, product, from, to) =>
+      data.outliers(ds(), F(machine, product, from, to), metric, k == null ? 3 : k),
+    desc: '列出偏離平均超過 k 倍標準差的爐次（含爐號、日期、偏離幾個標準差）',
+    params: {
+      metric: S('量測欄位'), k: N('幾倍標準差（預設 3）'),
+      machine: S('機台，省略＝全部（預設）'), product: S('產品，省略＝全部（預設）'),
+      from: S('起始日（預設不限）'), to: S('結束日（預設不限）') },
+    order: ['metric', 'k', 'machine', 'product', 'from', 'to'] },
+
+  { name: 'correlateMetrics', domain: '生產資料', fn: (metricX, metricY, machine, product, from, to) =>
+      data.correlate(ds(), F(machine, product, from, to), metricX, metricY),
+    desc: '兩個量測值的相關係數與斜率（務必先指定機台，混機台算會失真）',
+    params: {
+      metricX: S('自變數欄位，如 成長溫度'), metricY: S('應變數欄位，如 波長'),
+      machine: S('機台，強烈建議指定（預設全部）'), product: S('產品，省略＝全部（預設）'),
+      from: S('起始日（預設不限）'), to: S('結束日（預設不限）') },
+    order: ['metricX', 'metricY', 'machine', 'product', 'from', 'to'] },
+
+  { name: 'getRunDetail', domain: '生產資料', fn: (runId) => data.runDetail(ds(), runId),
+    desc: '查單一爐次的完整資料',
+    params: { runId: S('爐號') }, order: ['runId'] },
+
+  { name: 'listRuns', domain: '生產資料', fn: (machine, product, from, to, limit) =>
+      data.listRuns(ds(), F(machine, product, from, to), limit == null ? 50 : limit),
+    desc: '列出符合條件的爐次清單',
+    params: {
+      machine: S('機台，省略＝全部（預設）'), product: S('產品，省略＝全部（預設）'),
+      from: S('起始日（預設不限）'), to: S('結束日（預設不限）'), limit: N('最多幾筆（預設 50）') },
+    order: ['machine', 'product', 'from', 'to', 'limit'] },
 ];
 
 const byName = new Map(TOOLS.map((t) => [t.name, t]));
@@ -214,13 +305,30 @@ function call(name, args) {
   }
 }
 
-module.exports = { TOOLS, toolSchemas, call };
+module.exports = { TOOLS, toolSchemas, call, attachData };
 
 /* ==========================================================
    CLI
    ========================================================== */
 if (require.main === module) {
   const argv = process.argv.slice(2);
+
+  // --data <檔案...> 先掛上生產資料，後面才用得了「生產資料」那一組工具
+  const di = argv.indexOf('--data');
+  if (di >= 0) {
+    const files = [];
+    let j = di + 1;
+    while (j < argv.length && !argv[j].startsWith('--') && !byName.has(argv[j])) files.push(argv[j++]);
+    if (!files.length) { console.error('--data 後面要接檔案路徑'); process.exit(1); }
+    try {
+      const d = attachData(files);
+      console.error(`（已載入 ${d.rows.length} 筆爐次，量測欄位：${d.metrics.join('、')}）`);
+      if (d.missing.length) {
+        console.error(`（⚠ 這些欄位沒對應到：${d.missing.join('、')}——請補 epi_data.js 的 COLUMN_ALIASES）`);
+      }
+    } catch (e) { console.error(`載入失敗：${e.message}`); process.exit(1); }
+    argv.splice(di, files.length + 1);
+  }
 
   if (argv[0] === '--schema') {
     console.log(JSON.stringify(toolSchemas(), null, 2));
