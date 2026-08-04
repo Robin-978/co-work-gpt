@@ -198,8 +198,9 @@ footer a{color:var(--s1)}
 
   <div class="sliders">
     <div class="slider">
-      <div class="head"><span>產生長度</span><b id="lenVal">18</b></div>
-      <input id="len" type="range" min="1" max="40" value="18">
+      <div class="head"><span>產生長度</span><b id="lenVal">36</b></div>
+      <input id="len" type="range" min="1" max="200" value="36">
+      <div id="lenHint" class="hint"></div>
     </div>
     <div class="slider">
       <div class="head"><span>溫度 Temperature</span><b id="tempVal">0.90</b></div>
@@ -995,11 +996,26 @@ $('miniStop').onclick = () => $('stopBtn').click();
 document.querySelectorAll('.preset').forEach((b) => {
   b.onclick = () => { $('prompt').value = b.textContent; if (!running) start(); };
 });
-$('len').oninput = function () { $('lenVal').textContent = this.value; };
+// 產生長度可以拉到超過上下文長度，這時視窗會往前滑、開頭會被擠掉——值得講出來
+function syncLenHint() {
+  const n = parseInt($('len').value, 10);
+  const promptLen = Array.from($('prompt').value).length;
+  const bits = [];
+  if (promptLen + n > CFG.B) {
+    bits.push('提示 ' + promptLen + ' 字 ＋ 產生 ' + n + ' 字已經超過 ' + CFG.B +
+      ' 個 token 的上下文，最前面的字會被擠出視窗——模型從那一步起就看不到開頭了。');
+  }
+  if (detail && n > 40) {
+    bits.push('🐢「每個字都完整演示」跑 ' + n + ' 次會很久，想快一點就切成「只完整演示第一個字」。');
+  }
+  $('lenHint').innerHTML = bits.join('<br>');
+}
+$('len').oninput = function () { $('lenVal').textContent = this.value; syncLenHint(); };
+$('prompt').addEventListener('input', syncLenHint);
 $('temp').oninput = function () { $('tempVal').textContent = (this.value / 100).toFixed(2); };
 $('topk').oninput = function () { $('topkVal').textContent = this.value; };
 $('spd').oninput = function () { speed = this.value / 10; $('spdVal').textContent = speed.toFixed(1) + '×'; };
-$('detailBtn').onclick = function () { detail = !detail; this.setAttribute('aria-pressed', String(detail)); this.textContent = detail ? '🐢 每個字都完整演示' : '🐇 只完整演示第一個字'; };
+$('detailBtn').onclick = function () { detail = !detail; this.setAttribute('aria-pressed', String(detail)); this.textContent = detail ? '🐢 每個字都完整演示' : '🐇 只完整演示第一個字'; syncLenHint(); };
 $('autoscrollBtn').onclick = function () { autoscroll = !autoscroll; this.setAttribute('aria-pressed', String(autoscroll)); };
 stepEls.forEach((e) => { e.onclick = () => { const n = +e.dataset.go; stageEls[n].scrollIntoView({ block: 'start' }); }; });
 window.addEventListener('keydown', (e) => {
@@ -1027,6 +1043,7 @@ document.querySelectorAll('.dimC').forEach((e) => { e.textContent = CFG.C; });
 document.querySelectorAll('.dimF').forEach((e) => { e.textContent = CFG.F; });
 $('fParams').textContent = N_PARAMS.toLocaleString();
 $('fCorpus').textContent = '__CORPUS_CHARS__';
+syncLenHint();
 
 // 先靜態畫一次，讓頁面一打開就有東西看
 (function preview() {
