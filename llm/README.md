@@ -61,7 +61,9 @@ STEPS=3000 DIM=48 HEADS=3 FF=128 BATCH=12 LR=3e-3 node run_train.js
 - `run_train.js` — AdamW 訓練迴圈 + int8 量化輸出
 - `probe.js` — 檢查工具：語料/字典健康度、機率分布、熵、實際續寫（也可被其他工具 require）
 - `rag_demo.js` — RAG 的最小示範：檢索 → 組裝 prompt → 生成，並對照有無檢索的差異
-- `epi_calc.js` — III/V 磊晶的專家系統核心：Vegard、能隙、臨界厚度、bubbler、V/III 比，附自我測試
+- `epi_calc.js` — III/V 磊晶的專家系統核心：材料表、Vegard、Varshni、四元匹配、XRD、量子井、bubbler、電性量測
+- `fin_calc.js` — 金融財經的專家系統核心：複利、房貸、NPV/IRR、DCF、債券、Black-Scholes、風險績效
+- `expert.js` — 把兩個領域包成一份「LLM 可呼叫的工具目錄」，含 function-calling 用的 JSON 定義
 - `page.template.html` — 網頁模板，`__WEIGHTS__` 會被換成權重
 - `build.js` — 打包成單一 HTML
 
@@ -296,10 +298,12 @@ const logits = fwd(encode(prompt));           // 3. 生成：同一個模型、�
 
 ## 專家系統 + LLM：精準度真正的來源
 
-`tools/epi_calc.js` 是一個可以直接跑的 III/V 磊晶專家系統核心：
+三支程式，一條線：
 
 ```bash
-node epi_calc.js     # 自我測試 + 範例
+node epi_calc.js     # III/V 磊晶：14 項自我測試 + 範例
+node fin_calc.js     # 金融財經：16 項自我測試 + 範例
+node expert.js       # 工具目錄：36 個確定性函式，兩個領域
 ```
 
 ### 為什麼需要它：模型不會算，只會背
@@ -313,62 +317,105 @@ node epi_calc.js     # 自我測試 + 範例
 
 熵 0.01 bits，它一點都不覺得自己在猜。**因為晶格常數是一個「隨組成連續變化的函數」，
 不是一個可以背下來的事實**——AlxGa1-xAs 有無限多種組成，模型能背的只有它看過的那一個。
+複利、IRR、Black-Scholes 也完全一樣：那些是函數，不是事實。
 
-而這件事根本不該用「記憶」解決，它是一行 Vegard 定律：
+而這件事根本不該用「記憶」解決：
 
 ```
 Al0.3Ga0.7As：晶格 5.65561 Å　能隙 1.820 eV　波長 681.2 nm　與 GaAs 不匹配 0.0417%
+房貸 100 萬、年利 2%、30 年：月付 3696.19 元，總利息 330,630 元（本金的 33.1%）
 ```
 
-### 所以答案是：會更精準，但關鍵不是「餵更多知識」，是「換架構」
+### 角色分工
 
 | 角色 | 負責什麼 | 不負責什麼 |
 |---|---|---|
-| **專家系統**（`epi_calc.js`）| 算數字、查表、套規則 | 聽懂人話 |
-| **LLM** | 聽懂問題、決定呼叫哪個函式、把結果講成人話、缺參數時反問 | **產生任何數字** |
+| **專家系統**（`epi_calc` / `fin_calc`）| 算數字、查表、套規則 | 聽懂人話 |
+| **LLM** | 聽懂問題、挑對函式、填對參數、把結果講成人話、缺參數時反問 | **產生任何數字** |
 
 差別在於：RAG 是把資料放進 context 讓模型「自己讀」，模型仍可能讀錯；
 專家系統是模型**呼叫**一段確定性的程式，數字由程式算出來，模型只是轉述——
 **這條路上沒有幻覺的空間**。
 
-### `epi_calc.js` 目前算得出什麼
+### `epi_calc.js`：III/V 磊晶
 
-| 函式 | 算什麼 | 依據 |
-|---|---|---|
-| `latticeConstant` | 三元合金晶格常數 | Vegard 定律 |
-| `bandgap` | 三元合金能隙 | 線性內插 + 彎曲參數 |
-| `egToWavelength` | 能隙 ↔ 發光波長 | λ = 1239.84 / Eg |
-| `mismatch` | 晶格不匹配度 | (a_epi − a_sub)/a_sub |
-| `latticeMatchedComposition` | 與某基板匹配的組成 | 二分搜尋 |
-| `criticalThickness` | 應變層臨界厚度 | Matthews-Blakeslee（60° 差排）|
-| `vaporPressure` / `bubblerMolarFlow` | 前驅物蒸氣壓與莫耳流量 | log10(P)=A−B/T |
-| `vIIIRatio` | V/III 比 | 五族 µmol ÷ 三族 µmol |
+材料表含 16 種材料（閃鋅礦 III/V、纖鋅礦 III/N、Si/Ge 基板、藍寶石），
+標記晶體結構，**不同結構混用會直接報錯**（GaAs 和 GaN 不能用 Vegard 內插）。
 
-檔案最上面有六項**自我測試**，拿已知的物理事實當基準（InGaAs/InP 匹配組成 0.53、
-Al0.3Ga0.7As 能隙 1.80 eV、TMGa 在 0 °C 的蒸氣壓 65 Torr…）。這一點很重要：
-**專家系統可以被測試，模型的記憶不行。**
+| 函式 | 算什麼 |
+|---|---|
+| `latticeConstant` / `bandgap` | Vegard 三元晶格常數、能隙（含彎曲參數）|
+| `bandgapAtTemperature` | Varshni 溫度相依——解釋「成長溫度飄一點，室溫波長就跟著變」|
+| `quaternaryLattice` / `quaternaryMatchedX` | 四元合金（InGaAsP 長在 InP 上要配多少 Ga）|
+| `mismatch` / `inPlaneStrain` / `criticalThickness` | 不匹配度、應變、Matthews-Blakeslee 臨界厚度 |
+| `dSpacingCubic` / `braggAngle` | XRD 晶面間距與 2θ |
+| `quantumWellEnergy` | 量子井基態能階（估藍移）|
+| `vaporPressure` / `bubblerMolarFlow` / `vIIIRatio` | 前驅物蒸氣壓、莫耳流量、V/III 比 |
+| `hallCarrierConcentration` / `fourPointSheetResistance` | 霍爾載子濃度、四點探針片電阻 |
+| `growthRate` | 成長速率換算 |
+
+**14 項自我測試**釘在已知物理上：In0.53Ga0.47As 匹配 InP、Al0.3Ga0.7As 1.80 eV、
+GaAs (004) 2θ = 66.05°、10 nm 井基態 56 meV、TMGa 在 0 °C 蒸氣壓 65 Torr、
+四點探針係數 π/ln2 = 4.5324，外加一項「該擋的要擋下來」。
+
+### `fin_calc.js`：金融財經
+
+| 函式 | 算什麼 |
+|---|---|
+| `futureValue` / `presentValue` / `annuityPV` / `cagr` | 貨幣的時間價值、年金、年化報酬 |
+| `effectiveAnnualRate` / `realRate` / `doublingTime` | 有效年利率、Fisher 實質利率、翻倍年數（含 72 法則對照）|
+| `loanPayment` / `amortize` | 房貸月付、已付利息、剩餘本金、總利息 |
+| `npv` / `irr` / `paybackPeriod` / `dcfValue` / `wacc` | 投資評估與估值 |
+| `bondPrice` / `bondYTM` / `bondDuration` | 債券定價、殖利率反推、存續期間與凸性 |
+| `blackScholes` / `impliedVol` | 歐式選擇權定價、Delta、隱含波動度反推 |
+| `sharpe` / `annualVol` / `maxDrawdown` | 風險與績效 |
+| `breakEvenUnits` / `dupontROE` / `purchasingPower` | 損益兩平、ROE 杜邦拆解、購買力 |
+
+**16 項自我測試**釘在課本標準答案上：房貸 100 萬 / 2% / 30 年月付 3696.19、
+債券（面額 100、票息 5%、3 年、YTM 6%）價格 97.327、Macaulay 存續 2.857、
+Black-Scholes（S=K=100、r=5%、σ=20%、T=1）買權 10.4506、
+以及「由價格反推 YTM 應回到 6%」「由市價反推隱含波動度應回到 20%」這種來回一致性檢查。
+
+### `expert.js`：交給 LLM 的那份清單
+
+```bash
+node expert.js                 # 列出 36 個工具
+node expert.js --schema        # 印出 function-calling 用的 JSON 定義
+node expert.js bandgap AlAs GaAs 0.3
+node expert.js loanPayment 1000000 0.02 30
+node expert.js --json bondDuration '{"face":100,"couponRate":0.05,"years":3,"ytm":0.06}'
+```
+
+真實系統裡 LLM 拿到的不是知識，而是這份函式清單。模型不需要「知道」Black-Scholes
+或 Vegard 定律，只需要挑對函式、填對參數。
+
+有一個行為特別值得注意——**參數不齊時它會反問，不會自己填**：
+
+```
+$ node expert.js blackScholes 100 100 0.05
+✗ 缺少參數：sigma、T。請補齊後再算，不要用猜的。
+```
+
+這正是把「不知道」變成一個明確狀態，而不是讓模型用一個看起來合理的數字補上去。
 
 ### 關於機台參數（Aixtron G3/G4 之類）
 
 `MACHINES` 這張表**刻意留空**，查不到的時候會直接說「不在參數表裡，請填入實機資料——不要用猜的」。
 
-理由有三個，而且都是實務上的：
-
 1. 各廠的機台配置、recipe 與校正值都不一樣，沒有「通用的正確答案」
 2. 這類參數多屬廠商與製程機密，不該由任何模型憑印象產生
-3. **一旦填進表裡，它就從「模型可能記錯的東西」變成「查表查得到的事實」**——
-   這正是把知識放進專家系統、而不是放進權重的價值
+3. **一旦填進表裡，它就從「模型可能記錯的東西」變成「查表查得到的事實」**
 
 ### 什麼問題該用什麼
 
 | 問題性質 | 例子 | 該用 |
 |---|---|---|
-| 可計算 | 「Al 三成的 AlGaAs 發光波長？」 | 專家系統計算 |
+| 可計算 | 「Al 三成的 AlGaAs 發光波長？」「這筆房貸總利息多少？」 | 專家系統計算 |
 | 可查表 | 「G4 三號機的載盤轉速上限？」 | 資料庫查詢 |
 | 需要經驗與推理 | 「波長偏移 2 nm 可能是什麼原因？」 | LLM + 檢索歷史案例 |
-| 需要判定 | 「這批要不要判退？」 | 規則引擎（**不要**交給 LLM）|
+| 需要判定 | 「這批要不要判退？」「這個案子要不要投？」 | 規則引擎（**不要**交給 LLM）|
 
-最後一點值得強調：**精準度的問題會從「模型記得準不準」變成「公式對不對、參數表新不新」**。
+**精準度的問題會從「模型記得準不準」變成「公式對不對、參數表新不新」**。
 後者是可以寫測試、可以版本控制、可以請資深工程師 review 的工程問題——這才是它真正的價值。
 
 ## 操作

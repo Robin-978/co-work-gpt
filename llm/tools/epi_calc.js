@@ -16,12 +16,42 @@
       各廠若有自己的校正值，改這裡即可，不必重訓任何東西。
    ========================================================== */
 const MATERIALS = {
-  GaAs: { a: 5.65325, Eg: 1.424, gap: '直接' },
-  AlAs: { a: 5.6611, Eg: 3.003, gap: '直接(Γ)，實際為間接，此處取 Γ 谷' },
-  InAs: { a: 6.0583, Eg: 0.354, gap: '直接' },
-  InP:  { a: 5.8687, Eg: 1.344, gap: '直接' },
-  GaP:  { a: 5.4505, Eg: 2.780, gap: '直接(Γ)，實際為間接，此處取 Γ 谷' },
+  // 閃鋅礦（zinc-blende）III/V
+  GaAs: { a: 5.65325, Eg: 1.424, gap: '直接', struct: 'zb' },
+  AlAs: { a: 5.6611,  Eg: 3.003, gap: '間接(X)，此處取 Γ 谷', struct: 'zb' },
+  InAs: { a: 6.0583,  Eg: 0.354, gap: '直接', struct: 'zb' },
+  InP:  { a: 5.8687,  Eg: 1.344, gap: '直接', struct: 'zb' },
+  GaP:  { a: 5.4505,  Eg: 2.780, gap: '間接(X)，此處取 Γ 谷', struct: 'zb' },
+  AlP:  { a: 5.4672,  Eg: 3.630, gap: '間接(X)，此處取 Γ 谷', struct: 'zb' },
+  GaSb: { a: 6.0959,  Eg: 0.726, gap: '直接', struct: 'zb' },
+  AlSb: { a: 6.1355,  Eg: 2.386, gap: '間接(X)，此處取 Γ 谷', struct: 'zb' },
+  InSb: { a: 6.4794,  Eg: 0.170, gap: '直接', struct: 'zb' },
+  // 纖鋅礦（wurtzite）III/N —— a 為基面晶格常數
+  GaN:  { a: 3.189, c: 5.185, Eg: 3.44, gap: '直接', struct: 'wz' },
+  AlN:  { a: 3.112, c: 4.982, Eg: 6.20, gap: '直接', struct: 'wz' },
+  InN:  { a: 3.545, c: 5.703, Eg: 0.64, gap: '直接', struct: 'wz' },
+  // 基板用的四族（鑽石結構），拿來比較晶格用
+  Si:   { a: 5.4310, Eg: 1.12, gap: '間接', struct: 'dia' },
+  Ge:   { a: 5.6579, Eg: 0.66, gap: '間接', struct: 'dia' },
+  // 常見的異質基板
+  Sapphire: { a: 4.758, c: 12.991, Eg: null, gap: '絕緣體', struct: 'corundum' },
 };
+
+// Varshni 參數：Eg(T) = Eg(0) − αT²/(T+β)　（α 單位 eV/K，β 單位 K）
+const VARSHNI = {
+  GaAs: { Eg0: 1.519, alpha: 5.405e-4, beta: 204 },
+  InP:  { Eg0: 1.4236, alpha: 3.63e-4, beta: 162 },
+  InAs: { Eg0: 0.417, alpha: 2.76e-4, beta: 93 },
+  GaN:  { Eg0: 3.507, alpha: 9.09e-4, beta: 830 },
+  AlAs: { Eg0: 3.099, alpha: 8.85e-4, beta: 530 },
+};
+
+// X 光源波長 [Å]
+const XRAY = { CuKa1: 1.540562, CuKa: 1.5418, CoKa1: 1.788965 };
+
+// 物理常數
+const Q = 1.602176634e-19;             // 基本電荷 [C]
+const QW_CONST = 0.376035;             // h²/(8·m_e) [eV·nm²]，無限深井用
 
 // 三元合金的能隙彎曲參數 b [eV]：Eg(x) = x·EgA + (1-x)·EgB - b·x(1-x)
 const BOWING = {
@@ -29,6 +59,10 @@ const BOWING = {
   'InAs-GaAs': 0.477,  // InxGa1-xAs
   'InAs-InP':  0.10,   // InAsxP1-x（近似）
   'GaP-GaAs':  0.19,   // GaAsxP1-x（近似）
+  'InN-GaN':   1.40,   // InxGa1-xN
+  'AlN-GaN':   0.70,   // AlxGa1-xN
+  'AlSb-GaSb': 0.47,   // AlxGa1-xSb
+  'InSb-InAs': 0.58,   // InAsxSb1-x（近似）
 };
 
 // 前驅物蒸氣壓：log10(P[Torr]) = A - B/T[K]
@@ -37,6 +71,10 @@ const PRECURSORS = {
   TMIn: { A: 10.52, B: 3014,    group: 'III', name: '三甲基銦' },
   TMAl: { A: 8.224, B: 2134.83, group: 'III', name: '三甲基鋁' },
   TEGa: { A: 8.083, B: 2162,    group: 'III', name: '三乙基鎵' },
+  TMSb: { A: 7.7068, B: 1697,   group: 'V',   name: '三甲基銻' },
+  DMZn: { A: 7.802, B: 1560,    group: '摻雜', name: '二甲基鋅（p 型）' },
+  DEZn: { A: 8.28,  B: 2109,    group: '摻雜', name: '二乙基鋅（p 型）' },
+  CBr4: { A: 7.83,  B: 1900,    group: '摻雜', name: '四溴化碳（碳摻雜）' },
 };
 
 const PLANCK_EV_NM = 1239.84;  // hc [eV·nm]
@@ -44,9 +82,19 @@ const PLANCK_EV_NM = 1239.84;  // hc [eV·nm]
 /* ==========================================================
    1. Vegard 定律：三元合金的晶格常數
    ========================================================== */
-function latticeConstant(matA, matB, x) {
+function requirePair(matA, matB) {
   const A = MATERIALS[matA], B = MATERIALS[matB];
-  if (!A || !B) throw new Error(`未知材料：${matA} / ${matB}`);
+  if (!A) throw new Error(`未知材料：${matA}（可用：${Object.keys(MATERIALS).join(', ')}）`);
+  if (!B) throw new Error(`未知材料：${matB}（可用：${Object.keys(MATERIALS).join(', ')}）`);
+  // 不同晶體結構不能用 Vegard 內插——這種組合根本不成合金，直接擋掉
+  if (A.struct !== B.struct) {
+    throw new Error(`${matA}(${A.struct}) 與 ${matB}(${B.struct}) 晶體結構不同，不能用 Vegard 內插`);
+  }
+  return [A, B];
+}
+
+function latticeConstant(matA, matB, x) {
+  const [A, B] = requirePair(matA, matB);
   if (x < 0 || x > 1) throw new Error('組成 x 必須介於 0 和 1');
   return x * A.a + (1 - x) * B.a;
 }
@@ -55,10 +103,45 @@ function latticeConstant(matA, matB, x) {
    2. 能隙（含彎曲參數）
    ========================================================== */
 function bandgap(matA, matB, x) {
-  const A = MATERIALS[matA], B = MATERIALS[matB];
-  if (!A || !B) throw new Error(`未知材料：${matA} / ${matB}`);
+  const [A, B] = requirePair(matA, matB);
   const b = BOWING[`${matA}-${matB}`] ?? BOWING[`${matB}-${matA}`] ?? 0;
   return x * A.Eg + (1 - x) * B.Eg - b * x * (1 - x);
+}
+
+/* ==========================================================
+   2b. 能隙的溫度相依（Varshni）
+       Eg(T) = Eg(0) − αT² / (T + β)
+       磊晶是在 600~750 °C 成長、在室溫量測的，這條式子解釋了
+       「為什麼成長溫度飄一點，室溫量到的波長就跟著變」。
+   ========================================================== */
+function bandgapAtTemperature(mat, tempK) {
+  const v = VARSHNI[mat];
+  if (!v) throw new Error(`${mat} 沒有 Varshni 參數（目前有：${Object.keys(VARSHNI).join(', ')}）`);
+  return v.Eg0 - v.alpha * tempK * tempK / (tempK + v.beta);
+}
+
+/* ==========================================================
+   2c. 四元合金 A(x)B(1-x)C(y)D(1-y) 的晶格常數（雙線性 Vegard）
+       典型用途：InGaAsP 要長在 InP 上，Ga 組成該配多少
+   ========================================================== */
+function quaternaryLattice(binaries, x, y) {
+  // binaries = { AC, AD, BC, BD }，都是 MATERIALS 裡的鍵名
+  const g = (k) => {
+    const m = MATERIALS[binaries[k]];
+    if (!m) throw new Error(`未知材料：${binaries[k]}`);
+    return m.a;
+  };
+  return (1 - x) * y * g('AC') + (1 - x) * (1 - y) * g('AD')
+       + x * y * g('BC') + x * (1 - y) * g('BD');
+}
+
+// 給定 y（例如 As 的比例），解出讓四元與基板匹配的 x
+function quaternaryMatchedX(binaries, y, substrate) {
+  const aSub = MATERIALS[substrate].a;
+  const f = (x) => quaternaryLattice(binaries, x, y) - aSub;
+  const f0 = f(0), f1 = f(1);
+  if (f0 * f1 > 0) return null;
+  return f0 / (f0 - f1);            // 對 x 是線性的，可以直接解
 }
 
 /* ==========================================================
@@ -142,6 +225,59 @@ function vIIIRatio(groupVumol, groupIIIumol) {
 const gasUmolPerMin = (sccm, concentration) => (sccm * (concentration === undefined ? 1 : concentration) / 22414) * 1e6;
 
 /* ==========================================================
+   8b. XRD：Bragg 條件與晶面間距
+   ========================================================== */
+const dSpacingCubic = (a, h, k, l) => a / Math.sqrt(h * h + k * k + l * l);
+
+function braggAngle(dSpacing, wavelengthA, order) {
+  const n = order || 1;
+  const sinT = n * (wavelengthA || XRAY.CuKa1) / (2 * dSpacing);
+  if (Math.abs(sinT) > 1) throw new Error('sinθ > 1，這個晶面在這個波長下量不到');
+  const th = Math.asin(sinT);
+  return { thetaDeg: th * 180 / Math.PI, twoThetaDeg: 2 * th * 180 / Math.PI };
+}
+
+/* ==========================================================
+   8c. 量子井的基態能階（無限深井近似）
+       E_n = n²·h²/(8·m*·L²)，用來估「井做多薄，波長會藍移多少」
+   ========================================================== */
+function quantumWellEnergy(widthNm, effectiveMass, level) {
+  const n = level || 1;
+  if (widthNm <= 0 || effectiveMass <= 0) throw new Error('井寬與有效質量必須大於 0');
+  return n * n * QW_CONST / (effectiveMass * widthNm * widthNm);   // [eV]
+}
+
+/* ==========================================================
+   8d. 電性量測
+   ========================================================== */
+// 霍爾量測 → 載子濃度 [cm^-3]（厚度 m、電流 A、磁場 T、霍爾電壓 V）
+function hallCarrierConcentration(currentA, fieldT, hallVoltageV, thicknessM) {
+  if (hallVoltageV === 0) throw new Error('霍爾電壓不能為 0');
+  const nSI = (currentA * fieldT) / (Q * thicknessM * Math.abs(hallVoltageV));  // m^-3
+  return nSI / 1e6;                                                            // cm^-3
+}
+// 霍爾係數與電阻率 → 遷移率 [cm²/V·s]
+const mobilityFromHall = (hallCoeffCm3PerC, resistivityOhmCm) => hallCoeffCm3PerC / resistivityOhmCm;
+
+// 四點探針（薄片近似）：Rs = (π/ln2)·(V/I)
+const fourPointSheetResistance = (voltageV, currentA) => (Math.PI / Math.LN2) * (voltageV / currentA);
+// 片電阻 ↔ 電阻率
+const sheetResistance = (resistivityOhmCm, thicknessCm) => resistivityOhmCm / thicknessCm;
+const resistivityFromSheet = (sheetOhmSq, thicknessCm) => sheetOhmSq * thicknessCm;
+
+/* ==========================================================
+   8e. 成長速率
+   ========================================================== */
+function growthRate(thicknessNm, minutes) {
+  if (minutes <= 0) throw new Error('時間必須大於 0');
+  const nmPerMin = thicknessNm / minutes;
+  return { nmPerMin, umPerHour: nmPerMin * 60 / 1000, aPerSec: nmPerMin * 10 / 60 };
+}
+
+// 應變層的面內應變（磊晶被基板拉/壓）
+const inPlaneStrain = (aEpi, aSub) => (aSub - aEpi) / aEpi;
+
+/* ==========================================================
    9. 機台參數表
       ⚠ 這裡刻意留空。Aixtron G3/G4 之類的機台參數，各廠的配置、
         recipe 與校正值都不同，而且多屬廠商／製程機密——由模型「生成」
@@ -170,10 +306,14 @@ function machineParam(id, path) {
 }
 
 module.exports = {
-  MATERIALS, BOWING, PRECURSORS, MACHINES,
-  latticeConstant, bandgap, egToWavelength, wavelengthToEg, mismatch,
-  latticeMatchedComposition, criticalThickness,
+  MATERIALS, BOWING, PRECURSORS, MACHINES, VARSHNI, XRAY,
+  latticeConstant, bandgap, bandgapAtTemperature, egToWavelength, wavelengthToEg, mismatch,
+  latticeMatchedComposition, criticalThickness, inPlaneStrain,
+  quaternaryLattice, quaternaryMatchedX,
   vaporPressure, bubblerMolarFlow, vIIIRatio, gasUmolPerMin, machineParam,
+  dSpacingCubic, braggAngle, quantumWellEnergy,
+  hallCarrierConcentration, mobilityFromHall, fourPointSheetResistance,
+  sheetResistance, resistivityFromSheet, growthRate,
 };
 
 /* ==========================================================
@@ -198,6 +338,21 @@ if (require.main === module) {
         egToWavelength(bandgap('InAs', 'GaAs', xm)), 1650, 60);
   check('Al0.3Ga0.7As 能隙 [eV]（Vurgaftman 約 1.80）', bandgap('AlAs', 'GaAs', 0.3), 1.80, 0.04);
   check('TMGa 在 0 °C 的蒸氣壓 [Torr]（文獻約 65）', vaporPressure('TMGa', 0), 65, 5);
+  check('Varshni：GaAs 在 300 K 的能隙（表值 1.424）', bandgapAtTemperature('GaAs', 300), 1.424, 0.01);
+  check('Varshni：GaN 在 300 K 的能隙（表值 3.44）', bandgapAtTemperature('GaN', 300), 3.44, 0.01);
+  check('InGaAsP(y=1) 匹配 InP 的 Ga 組成應等於 0.47',
+        quaternaryMatchedX({ AC: 'InAs', AD: 'InP', BC: 'GaAs', BD: 'GaP' }, 1, 'InP'), 0.468, 0.005);
+  check('GaAs (004) 的 2θ [度]（Cu Kα1，文獻約 66.05）',
+        braggAngle(dSpacingCubic(MATERIALS.GaAs.a, 0, 0, 4)).twoThetaDeg, 66.05, 0.1);
+  check('10 nm GaAs 量子井的電子基態 [eV]（m*=0.067，課本約 0.056）',
+        quantumWellEnergy(10, 0.067), 0.056, 0.001);
+  check('四點探針修正係數 π/ln2（V/I = 1 Ω）', fourPointSheetResistance(1, 1), 4.5324, 0.001);
+  check('成長 2 µm 費時 60 分 → µm/hr', growthRate(2000, 60).umPerHour, 2.0, 1e-9);
+  // 這一項測的是「該擋的要擋下來」：閃鋅礦和纖鋅礦不能混
+  let blocked = false;
+  try { latticeConstant('GaAs', 'GaN', 0.5); } catch (e) { blocked = true; }
+  console.log(`  ${blocked ? '✓' : '✗'} GaAs(閃鋅礦) 與 GaN(纖鋅礦) 混用應被擋下`);
+  blocked ? pass++ : fail++;
   console.log(`  → ${pass} 過 / ${fail} 失敗\n`);
 
   console.log('=== 範例 1：砷化鋁鎵（模型剛剛答錯的那一題）===');
@@ -227,7 +382,30 @@ if (require.main === module) {
   console.log(`  AsH3 50 sccm（純）= ${round(ash3, 1)} µmol/min`);
   console.log(`    → V/III = ${round(vIIIRatio(ash3, tmga.umolPerMin), 1)}`);
 
-  console.log('\n=== 範例 4：機台參數（刻意沒有預設值）===');
+  console.log('\n=== 範例 4：成長溫度飄移對室溫波長的影響（Varshni）===');
+  for (const T of [293, 300, 350]) {
+    const eg = bandgapAtTemperature('GaAs', T);
+    console.log(`  GaAs @ ${T} K：能隙 ${round(eg, 4)} eV　波長 ${round(egToWavelength(eg), 1)} nm`);
+  }
+
+  console.log('\n=== 範例 5：InGaAsP 長在 InP 上（四元匹配）===');
+  const QB = { AC: 'InAs', AD: 'InP', BC: 'GaAs', BD: 'GaP' };
+  for (const y of [0.4, 0.7, 1.0]) {
+    const x = quaternaryMatchedX(QB, y, 'InP');
+    console.log(`  As 比例 y=${y}：Ga 組成 x=${round(x, 4)}　晶格 ${round(quaternaryLattice(QB, x, y), 5)} Å（InP 為 5.8687）`);
+  }
+
+  console.log('\n=== 範例 6：XRD 與量子井 ===');
+  for (const m of ['GaAs', 'InP', 'Ge']) {
+    const d = dSpacingCubic(MATERIALS[m].a, 0, 0, 4);
+    console.log(`  ${m} (004)：d = ${round(d, 5)} Å　2θ = ${round(braggAngle(d).twoThetaDeg, 3)}°`);
+  }
+  for (const w of [3, 5, 10]) {
+    const e = quantumWellEnergy(w, 0.067);
+    console.log(`  ${w} nm GaAs 井：電子基態 ${round(e * 1000, 1)} meV　→ 相對塊材藍移 ${round(egToWavelength(1.424) - egToWavelength(1.424 + e), 1)} nm`);
+  }
+
+  console.log('\n=== 範例 7：機台參數（刻意沒有預設值）===');
   const q = machineParam('AIX-G4-01', 'susceptorRpmRange');
   console.log(`  ${q.ok ? q.value : q.reason}`);
 
