@@ -202,8 +202,8 @@ footer a{color:var(--s1)}
       <input id="len" type="range" min="1" max="40" value="18">
     </div>
     <div class="slider">
-      <div class="head"><span>溫度 Temperature</span><b id="tempVal">1.30</b></div>
-      <input id="temp" type="range" min="20" max="250" value="130">
+      <div class="head"><span>溫度 Temperature</span><b id="tempVal">0.90</b></div>
+      <input id="temp" type="range" min="20" max="250" value="90">
     </div>
     <div class="slider">
       <div class="head"><span>Top-K 候選</span><b id="topkVal">8</b></div>
@@ -1043,7 +1043,8 @@ $('fCorpus').textContent = '__CORPUS_CHARS__';
   redrawAttention(c);
   const L = CFG.L - 1, b = c.blocks[L];
   drawFFN($('cvFfn'), b.ln2.subarray((T - 1) * CFG.C, T * CFG.C), b.act.subarray((T - 1) * CFG.F, T * CFG.F), b.fo.subarray((T - 1) * CFG.C, T * CFG.C), CFG.C, CFG.F, 2);
-  const { keep, probs } = softmaxTopK(c.logits, 1.3, 8);
+  // 首屏預覽也用控制列上的溫度，改預設值不會讓這裡跟實際演示對不起來
+  const { keep, probs } = softmaxTopK(c.logits, parseInt($('temp').value, 10) / 100, 8);
   renderBars($('genBars'), keep.map((v, i) => ({ label: showChar(VOCAB[v]), frac: probs[i], text: (probs[i] * 100).toFixed(1) + '%' })), () => 'var(--s1)', false);
   $('outPrompt').textContent = 'MOCVD 的成長溫度';
   document.querySelectorAll('.readout').forEach((e) => { e.innerHTML = '👆 按「開始演示」就會看到這一步的實際運算。'; });
