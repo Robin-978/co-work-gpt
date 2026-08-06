@@ -64,6 +64,8 @@ STEPS=3000 DIM=48 HEADS=3 FF=128 BATCH=12 LR=3e-3 node run_train.js
 - `rag_demo.js` — RAG 的最小示範：檢索 → 組裝 prompt → 生成，並對照有無檢索的差異
 - `epi_calc.js` — III/V 磊晶的專家系統核心：材料表、Vegard、Varshni、四元匹配、XRD、量子井、bubbler、電性量測
 - `fin_calc.js` — 金融財經的專家系統核心：複利、房貸、NPV/IRR、DCF、債券、Black-Scholes、風險績效
+- `inspect.js` — 摸清陌生 CSV：逐欄剖析、找關聯鍵、拆解檔名、產生去識別化樣本（資料不出廠）
+- `epi_log.js` — 把一爐機台 log（每秒一列、上萬列）壓成每 step 每通道的特徵；`--compare` 比對兩爐配方
 - `epi_data.js` — EPI 生產資料的查詢函式層：讀 CSV/TSV（UTF-8 與 Big5 自動辨識）、統計、Cpk、分組比較、SPC 判異、離群爐次、相關
 - `expert.js` — 把三個領域包成一份「LLM 可呼叫的工具目錄」，含 function-calling 用的 JSON 定義
 - `page.template.html` — 網頁模板，`__WEIGHTS__` 會被換成權重

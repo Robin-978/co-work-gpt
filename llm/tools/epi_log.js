@@ -274,6 +274,64 @@ function runRow(ex) {
   return row;
 }
 
+// ─────────────────────────────────────────────────────────────
+// 配方一致性：SP 是 recipe 的設定值，MV 是機台實際跑出來的
+// ─────────────────────────────────────────────────────────────
+// 這兩件事要分開比，因為對應到完全不同的失效與不同的負責人：
+//   SP vs SP（跨爐）＝配方被改過或載錯配方  → 製程
+//   MV vs SP（同爐）＝配方對但機台沒跟上    → 設備
+// 同一個產品的不同爐，SP 時間軸本來就該一模一樣，任何差異都值得問一句。
+
+function recipeOf(ex) {
+  const steps = new Map();
+  for (const seg of ex.segments) {
+    const chans = {};
+    for (const ch of ex.channels) {
+      const sp = seg.rows.map((r) => num(r[ch.sp])).filter((v) => v != null);
+      if (!sp.length) continue;
+      chans[ch.name] = { start: sp[0], end: sp[sp.length - 1] };
+    }
+    // 同一個 label 若出現多段，各段分開記，避免把兩段的設定值混在一起
+    let key = seg.label, i = 2;
+    while (steps.has(key)) key = `${seg.label}#${i++}`;
+    steps.set(key, { label: seg.label, n: seg.rows.length, channels: chans });
+  }
+  return { runNo: ex.runNo, structure: ex.structure, product: ex.product, steps };
+}
+
+function compareRecipe(exA, exB, opt = {}) {
+  const tol = opt.spTol == null ? 1e-9 : opt.spTol;
+  const A = recipeOf(exA), B = recipeOf(exB);
+  const ka = [...A.steps.keys()], kb = [...B.steps.keys()];
+  const onlyInA = ka.filter((k) => !B.steps.has(k));
+  const onlyInB = kb.filter((k) => !A.steps.has(k));
+  const shared = ka.filter((k) => B.steps.has(k));
+
+  const spDiffs = [], durationDiffs = [];
+  for (const k of shared) {
+    const a = A.steps.get(k), b = B.steps.get(k);
+    if (a.n !== b.n) durationDiffs.push({ step: k, aN: a.n, bN: b.n, delta: b.n - a.n });
+    const chans = new Set([...Object.keys(a.channels), ...Object.keys(b.channels)]);
+    for (const c of chans) {
+      const x = a.channels[c], y = b.channels[c];
+      if (!x || !y) { spDiffs.push({ step: k, channel: c, missing: !x ? 'A' : 'B' }); continue; }
+      const dS = y.start - x.start, dE = y.end - x.end;
+      if (Math.abs(dS) > tol || Math.abs(dE) > tol) {
+        spDiffs.push({ step: k, channel: c, aStart: x.start, bStart: y.start, aEnd: x.end, bEnd: y.end, dStart: dS, dEnd: dE });
+      }
+    }
+  }
+  return {
+    a: A.runNo, b: B.runNo,
+    productA: A.product, productB: B.product,
+    sameProduct: A.product === B.product && A.structure === B.structure,
+    stepsA: ka.length, stepsB: kb.length,
+    onlyInA, onlyInB, spDiffs, durationDiffs,
+    // 只有 SP 完全一致才算同一份配方；步長差異單獨看（有些 step 是條件結束不是時間結束）
+    sameRecipe: onlyInA.length === 0 && onlyInB.length === 0 && spDiffs.length === 0,
+  };
+}
+
 const csvCell = (v) => {
   if (v == null) return '';
   const s = typeof v === 'number' ? (Number.isInteger(v) ? String(v) : v.toFixed(6)) : String(v);
@@ -284,7 +342,121 @@ function toCsv(rows, cols) {
   return [header.join(',')].concat(rows.map((r) => header.map((c) => csvCell(r[c])).join(','))).join('\n') + '\n';
 }
 
-module.exports = { parseRunName, loadRun, extractRun, channelSummary, runRow, stepFeatures, toCsv, NAME_PATTERN };
+// ─────────────────────────────────────────────────────────────
+// 自我測試：用合成資料，答案都是手算得出來的
+// ─────────────────────────────────────────────────────────────
+function selfTest() {
+  const os = require('os');
+  let pass = 0, fail = 0;
+  const is = (name, cond) => { console.log(`  ${cond ? '✓' : '✗'} ${name}`); cond ? pass++ : fail++; };
+  const near = (name, got, want, tol = 1e-9) => {
+    const ok = got != null && Math.abs(got - want) <= tol;
+    console.log(`  ${ok ? '✓' : '✗'} ${name}：算出 ${got == null ? 'null' : +got.toFixed(6)}，預期 ${want} ±${tol}`);
+    ok ? pass++ : fail++;
+  };
+
+  // 合成一爐：兩個平台 step + 一個斜坡 step，前後各夾 Control=0 的空檔
+  const rows = [];
+  const push = (t, label, ctrl, sp, mv) =>
+    rows.push([`2026-07-06 0${Math.floor(t / 3600)}:${String(Math.floor(t / 60) % 60).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`,
+      label, ctrl, sp.toFixed(4), mv.toFixed(4)]);
+  let t = 0;
+  for (let i = 0; i < 5; i++) push(t++, '', 0, 100, 100);              // 空檔 5 秒
+  for (let i = 0; i < 20; i++) push(t++, 'S1', 1, 100, 100.5);         // 平台：MV 固定高 0.5
+  for (let i = 0; i < 20; i++) push(t++, 'S2', 1, 200, 200 - (i < 6 ? 20 - i * 4 : 0)); // 跳到 200，前 5 秒沒到位
+  for (let i = 0; i < 20; i++) push(t++, 'S3', 1, 200 + i * 5, 200 + i * 5 - 3);        // 斜坡：MV 落後 3
+  for (let i = 0; i < 3; i++) push(t++, 'S4', 0, 300, 300);            // 空檔 3 秒
+
+  const csv = ['Timestamp,StepLabel,Control_MV,X_SP,X_MV'].concat(rows.map((r) => r.join(','))).join('\n');
+  const f = path.join(os.tmpdir(), 'P06336_M06_P_MAT06261314_17351.csv');
+  fs.writeFileSync(f, csv);
+
+  console.log('\n── 檔名解析 ──');
+  const nm = parseRunName(f);
+  is('抽出 RUN_NO 261314', nm.runNo === '261314');
+  is('抽出機台 MAT06', nm.reactor === 'MAT06');
+  is('抽出 log 流水號 17351', nm.logSeq === '17351');
+  is('不符格式時 runNo 為 null', parseRunName('/tmp/隨便.csv').runNo === null);
+
+  console.log('\n── Control 過濾與分段 ──');
+  const ex = extractRun(f, {});
+  is('只留 Control==1 的 60 秒', ex.validRows === 60);
+  is('空檔 8 秒被排除', ex.droppedRows === 8);
+  is('切出 3 個 step 區段', ex.segments.length === 3);
+  is('認出 1 組 SP/MV 通道', ex.channels.length === 1);
+
+  console.log('\n── 平台：穩態偏差 ──');
+  const s1 = ex.features.find((x) => x.step === 'S1');
+  near('MV 固定高 0.5 → bias = 0.5', s1.bias, 0.5, 1e-9);
+  near('完全不抖 → errStd = 0', s1.errStd, 0, 1e-12);
+  is('SP 不動 → 不是斜坡', s1.isRamp === false);
+  is('一開始就在帶內 → kind = static', s1.kind === 'static');
+
+  console.log('\n── 平台：跳變後整定 ──');
+  const s2 = ex.features.find((x) => x.step === 'S2');
+  near('相對前一步跳了 +100', s2.dSP, 100, 1e-9);
+  is('中途進帶並待住 → kind = settled', s2.kind === 'settled');
+  is(`整定時間為正（算出 ${s2.settle_s}s）`, s2.settle_s > 0 && s2.settle_s <= 6);
+  // 穩態視窗從「進帶那一刻」起算，所以會含進帶當下那一筆（誤差 -4，剛好在 ±5 帶內）。
+  // 16 筆裡有一筆 -4 → 平均 -0.25，這是定義上正確的值，不是誤差。
+  // 真實資料裡可以忽略（step 72 是 116 秒進帶、534 筆穩態），小樣本才看得出來。
+  near('整定後 bias ≈ 0（含進帶當下那一筆）', s2.bias, -0.25, 1e-9);
+  is('進帶後的誤差確實都是 0', s2.errMaxAbs === 4);
+
+  console.log('\n── 斜坡：追隨延遲不該被當成偏差 ──');
+  const s3 = ex.features.find((x) => x.step === 'S3');
+  is('SP 在動 → isRamp', s3.isRamp === true);
+  is('分類為 ramp', s3.kind === 'ramp');
+  near('MV 落後 3 → bias = -3', s3.bias, -3, 1e-9);
+  const sum = channelSummary(ex);
+  is('斜坡不併進穩態偏差的統計', Math.abs(sum[0].biasMean - 0.25) < 0.3);
+  near('斜坡落後單獨報', sum[0].rampLagWorst, -3, 1e-9);
+
+  console.log('\n── 未到位：step 太短來不及 ──');
+  // 跳 +1000 但只有 8 秒，且 MV 幾乎沒動
+  const rows2 = [['Timestamp,StepLabel,Control_MV,X_SP,X_MV']];
+  for (let i = 0; i < 10; i++) rows2.push([`2026-07-06 00:00:${String(i).padStart(2, '0')},A,1,100.0000,100.0000`]);
+  for (let i = 0; i < 8; i++) rows2.push([`2026-07-06 00:00:${String(10 + i).padStart(2, '0')},B,1,1100.0000,${(100 + i * 2).toFixed(4)}`]);
+  const f2 = path.join(os.tmpdir(), 'P1_M06_P_MAT06261315_17352.csv');
+  fs.writeFileSync(f2, rows2.map((r) => r.join('')).join('\n'));
+  const ex2 = extractRun(f2, { minSteady: 3 });
+  const b = ex2.features.find((x) => x.step === 'B');
+  is('整段沒進帶 → kind = incomplete', b.kind === 'incomplete');
+  is('settle_s 為 null（沒整定）', b.settle_s === null);
+  is('殘差被記錄下來', Math.abs(b.endErr + 986) < 1);
+
+  console.log('\n── 配方一致性（SP vs SP）──');
+  const same = compareRecipe(ex, extractRun(f, {}));
+  is('同一份 log 跟自己比 → 完全一致', same.sameRecipe === true);
+  is('沒有 SP 差異', same.spDiffs.length === 0);
+  // 改一個設定值：S2 的 SP 從 200 變 205
+  const mutated = csv.replace(/,200\.0000,/g, ',205.0000,');
+  const f3 = path.join(os.tmpdir(), 'P2_M06_P_MAT06261316_17353.csv');
+  fs.writeFileSync(f3, mutated);
+  const diff = compareRecipe(ex, extractRun(f3, {}));
+  is('改過設定值 → 判為不同配方', diff.sameRecipe === false);
+  is('指出是哪一步哪個通道', diff.spDiffs.some((d) => d.step === 'S2' && d.channel === 'X'));
+  near('差異量正確（+5）', diff.spDiffs.find((d) => d.step === 'S2').dStart, 5, 1e-9);
+  // 少一個 step
+  const shortCsv = csv.split('\n').filter((l) => !l.includes(',S3,')).join('\n');
+  const f4 = path.join(os.tmpdir(), 'P3_M06_P_MAT06261317_17354.csv');
+  fs.writeFileSync(f4, shortCsv);
+  const miss = compareRecipe(ex, extractRun(f4, {}));
+  is('少一個 step 會被指出來', miss.onlyInA.includes('S3'));
+
+  console.log('\n── 一爐一列 ──');
+  const row = runRow(ex);
+  is('帶著 RUN_NO', row.RUN_NO === '261314');
+  is('帶著機台', row.REACTOR === 'MAT06');
+  is('有效秒數正確', row.VALID_S === 60);
+
+  [f, f2, f3, f4].forEach((p2) => { try { fs.unlinkSync(p2); } catch { /* 已刪就算了 */ } });
+  console.log(`\n${fail === 0 ? '全部通過' : '有失敗項目'}：${pass} 通過，${fail} 失敗\n`);
+  return fail === 0;
+}
+
+module.exports = { parseRunName, loadRun, extractRun, channelSummary, runRow, stepFeatures,
+                   recipeOf, compareRecipe, toCsv, selfTest, NAME_PATTERN };
 
 // ─────────────────────────────────────────────────────────────
 // CLI
@@ -296,14 +468,23 @@ if (require.main === module) {
   const files = argv.filter((a, i) => !a.startsWith('-') &&
     !['-o', '--channel', '--rel-band', '--min-steady', '--level-frac'].includes(argv[i - 1]));
 
+  if (flag('--test')) process.exit(selfTest() ? 0 : 1);
+
   if (!files.length) {
     console.log(`用法：node epi_log.js <機台log.csv...> [選項]
 
   --channel <名稱>     只看單一通道（例如 Reactor.temp），逐 step 列出
+  --compare            比對兩爐的配方（SP vs SP），找出配方被改過或載錯
   --rel-band <比例>    穩態帶＝SP 跳變量的幾成，預設 0.05
+  --level-frac <比例>  穩態帶的地板＝SP 量級的幾成，預設 0.005
   --min-steady <秒>    穩態至少要幾秒才納入統計，預設 5
   --run-row            輸出「一爐一列」的寬表（接 RUN_NO 用）
   -o <檔名>            寫出 CSV
+  --test               自我測試
+
+SP 是 recipe 的設定值，MV 是機台實際記錄值，兩者要分開比：
+  SP vs SP（跨爐，--compare）＝配方被改過或載錯　→ 製程
+  MV vs SP（同爐，預設）      ＝配方對但機台沒跟上 → 設備
 
 Control == 1 的區間才算有效；以 StepLabel 分段；每段的整定期會被切掉再算穩態。`);
     process.exit(0);
@@ -311,9 +492,45 @@ Control == 1 的區間才算有效；以 StepLabel 分段；每段的整定期�
 
   const opt = {
     relBand: parseFloat(val('--rel-band', '0.05')),
+    levelFrac: parseFloat(val('--level-frac', '0.005')),
     minSteady: parseInt(val('--min-steady', '5'), 10),
     channels: val('--channel', '') ? [val('--channel', '')] : null,
   };
+
+  if (flag('--compare')) {
+    if (files.length !== 2) { console.error('--compare 需要剛好兩個檔案。'); process.exit(1); }
+    const [A, B] = files.map((f) => extractRun(f, { ...opt, channels: null }));
+    const r = compareRecipe(A, B);
+    console.log(`\n${'═'.repeat(76)}`);
+    console.log(`配方比對：RUN ${r.a || '?'}（${r.productA || '?'}）  vs  RUN ${r.b || '?'}（${r.productB || '?'}）`);
+    if (!r.sameProduct) console.log('⚠ 這兩爐的結構／產品代號不同，配方本來就會不一樣，比對意義有限。');
+    console.log('─'.repeat(76));
+    console.log(`step 數：${r.stepsA} vs ${r.stepsB}`);
+    if (r.onlyInA.length) console.log(`只有 A 有的 step（${r.onlyInA.length}）：${r.onlyInA.slice(0, 12).join(', ')}${r.onlyInA.length > 12 ? ' …' : ''}`);
+    if (r.onlyInB.length) console.log(`只有 B 有的 step（${r.onlyInB.length}）：${r.onlyInB.slice(0, 12).join(', ')}${r.onlyInB.length > 12 ? ' …' : ''}`);
+
+    if (!r.spDiffs.length && !r.onlyInA.length && !r.onlyInB.length) {
+      console.log('\n✓ 設定值（SP）完全一致——這兩爐跑的是同一份配方。');
+    } else {
+      console.log(`\n設定值有 ${r.spDiffs.length} 處不同：`);
+      for (const d of r.spDiffs.slice(0, 25)) {
+        if (d.missing) { console.log(`  step ${String(d.step).padEnd(10)} ${d.channel.padEnd(18)} 只有 ${d.missing === 'A' ? 'B' : 'A'} 有這個通道`); continue; }
+        console.log(`  step ${String(d.step).padEnd(10)} ${d.channel.padEnd(18)} ` +
+          `${d.aStart} → ${d.bStart}` + (Math.abs(d.dEnd - d.dStart) > 1e-9 ? `（結束值 ${d.aEnd} → ${d.bEnd}）` : '') +
+          `　差 ${d.dStart > 0 ? '+' : ''}${+d.dStart.toFixed(6)}`);
+      }
+      if (r.spDiffs.length > 25) console.log(`  …還有 ${r.spDiffs.length - 25} 處`);
+    }
+
+    if (r.durationDiffs.length) {
+      const big = r.durationDiffs.filter((d) => Math.abs(d.delta) >= 2).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+      console.log(`\n步長不同的 step：${r.durationDiffs.length} 個（差 2 秒以上的 ${big.length} 個）`);
+      for (const d of big.slice(0, 10)) console.log(`  step ${String(d.step).padEnd(10)} ${d.aN}s → ${d.bN}s　${d.delta > 0 ? '+' : ''}${d.delta}s`);
+      console.log('  步長差異單獨看：有些 step 是條件結束而不是時間結束，差幾秒不一定代表配方被改。');
+    }
+    console.log(`\n結論：${r.sameRecipe ? '同一份配方' : '配方不同——開爐前要先確認是不是載錯或被改過'}`);
+    process.exit(0);
+  }
 
   const exs = [];
   for (const f of files) {
