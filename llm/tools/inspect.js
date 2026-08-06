@@ -65,18 +65,33 @@ function profileColumn(name, vals, total) {
   return c;
 }
 
+// 有些機台匯出在表頭前面還有前置行（實測看過空行、以及只有一個 "#" 的行）。
+// 空行會被 parseDelimited 濾掉，但 "#" 不會，直接拿第 0 列當表頭就會抓錯整個檔。
+// 資料列與表頭的欄數一致，前置行通常只有一兩欄——用這點把它們切掉。
+function dropPreamble(rows) {
+  if (rows.length < 2) return { rows, dropped: 0 };
+  const counts = rows.slice(0, 20).map((r) => r.length);
+  const tally = new Map();
+  for (const c of counts) tally.set(c, (tally.get(c) || 0) + 1);
+  const mode = [...tally].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0];
+  let i = 0;
+  while (i < rows.length - 1 && rows[i].length < mode) i++;
+  return { rows: rows.slice(i), dropped: i };
+}
+
 function profile(file) {
   const buf = fs.readFileSync(file);
   const { text, encoding } = decodeWithInfo(buf);
   const firstLine = text.split('\n')[0] || '';
   const delim = (firstLine.match(/\t/g) || []).length > (firstLine.match(/,/g) || []).length ? 'Tab' : '逗號';
-  const rows = parseDelimited(text);
+  const all = parseDelimited(text);
+  const { rows, dropped: preamble } = dropPreamble(all);
   if (rows.length < 2) throw new Error(`${file}：只有 ${rows.length} 列，沒有資料`);
 
   const header = rows[0].map((h) => h.trim());
   const body = rows.slice(1);
   const columns = header.map((h, i) => profileColumn(h, body.map((r) => r[i]), body.length));
-  return { file, encoding, delim, bytes: buf.length, header, body, columns, rowCount: body.length };
+  return { file, encoding, delim, bytes: buf.length, header, body, columns, rowCount: body.length, preamble };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -95,7 +110,7 @@ function report(p) {
   console.log(`\n${'═'.repeat(72)}`);
   console.log(`檔案：${path.basename(p.file)}`);
   console.log(`編碼：${p.encoding}　分隔：${p.delim}　大小：${(p.bytes / 1024).toFixed(1)} KB`);
-  console.log(`${p.rowCount.toLocaleString()} 列資料　${p.columns.length} 個欄位`);
+  console.log(`${p.rowCount.toLocaleString()} 列資料　${p.columns.length} 個欄位` + (p.preamble ? `　（表頭前有 ${p.preamble} 行前置內容，已略過）` : ''));
   console.log('─'.repeat(72));
   console.log(pad('欄位', 26) + pad('型別', 8) + pad('填充', 7) + pad('相異', 8) + '推測用途');
   console.log('─'.repeat(72));

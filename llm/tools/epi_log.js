@@ -23,21 +23,27 @@ const { profile } = require('./inspect.js');
 // ─────────────────────────────────────────────────────────────
 // 檔名裡的身分：RUN_NO 只存在於檔名，檔案內容沒有
 // ─────────────────────────────────────────────────────────────
-// 實測對照：量測檔的 Box No = "PMAT06261045-MW" = P + REACTOR + RUN_NO + -MW
-//           log 檔名     = "..._P_MAT06261314_17351.csv"  →  MAT06 + 261314
-// 所以 RUN_NO 是六位流水號，不是日期（261045 對應 G_DATE 2026/6/3，解不出來）。
-const NAME_PATTERN = /_P_([A-Z]{2,4}\d{2})(\d{6})_(\d+)/;
+// 實測對照：量測檔的 Box No = "PMAT06261042-MW" = P + REACTOR + RUN_NO + -MW
+//           log 檔名     = "..._PUHGR_MAT06261042_17004.txt"  →  MAT06 + 261042
+// 所以 RUN_NO 是六位流水號，不是日期（261042 對應 G_DATE 2026/6/3，解不出來）。
+//
+// 第一版寫死成 /_P_.../，是照著當時唯一一份樣本 "..._P_MAT06261314_17351.csv" 訂的，
+// 換一批檔名（"..._PUHGR_MAT06261042_17004.txt"）就整個抽不到。
+// 改成只要求「分隔符 + 機台碼 + 六位數」，中間那段叫什麼都不管。
+const NAME_PATTERN = /(?:^|[._-])([A-Z]{2,4}\d{2})(\d{6})(?:[._-](\d+))?(?:[._-]|$)/;
 
 function parseRunName(file) {
   const base = path.basename(file, path.extname(file));
   const m = base.match(NAME_PATTERN);
   const out = { file: base, reactor: null, runNo: null, logSeq: null, structure: null, product: null };
-  if (m) { out.reactor = m[1]; out.runNo = m[2]; out.logSeq = m[3]; }
-  // 第一段是結構代號、第三段是產品後綴（H01A2N.PRODUCT.A2N....）
+  if (m) { out.reactor = m[1]; out.runNo = m[2]; out.logSeq = m[3] || null; }
+  // 以 . 分段：第一段是結構代號、第三段是產品後綴。
+  // 兩批樣本都吻合（H01A2N.PRODUCT.A2N.… 與 H01A4N.TECN2602001.A4N.…），
+  // 但這是從兩份樣本歸納的，不是規格——所以照樣印出來讓人看得到對不對。
   const dots = base.split('.');
   if (dots.length >= 3) {
     out.structure = dots[0].replace(/^[0-9a-f]{6,}-/i, '');   // 去掉上傳時加的雜湊前綴
-    if (dots[1].toUpperCase() === 'PRODUCT') out.product = dots[2];
+    out.product = dots[2];
   }
   return out;
 }
@@ -282,21 +288,51 @@ function runRow(ex) {
 //   MV vs SP（同爐）＝配方對但機台沒跟上    → 設備
 // 同一個產品的不同爐，SP 時間軸本來就該一模一樣，任何差異都值得問一句。
 
+// 有些通道的 SP 欄逐列等於 MV 欄——那不是設定值，只是把量測值鏡射一份。
+// 實測 dP_Filter、dT_Exhaust、Ptrap.press、Control 都是 100% 相同。
+// 它們不屬於配方，拿來比會製造大量假差異；追隨誤差也恆為 0，放進偏差排名只是雜訊。
+function mirrorChannels(ex) {
+  const out = new Set();
+  for (const ch of ex.channels) {
+    let same = 0, n = 0;
+    for (const seg of ex.segments) {
+      for (const r of seg.rows) {
+        const a = r[ch.sp], b = r[ch.mv];
+        if (a != null && b != null) { n++; if (a === b) same++; }
+      }
+    }
+    if (n && same / n > 0.999) out.add(ch.name);
+  }
+  return out;
+}
+
 function recipeOf(ex) {
+  const mirrors = mirrorChannels(ex);
   const steps = new Map();
   for (const seg of ex.segments) {
     const chans = {};
     for (const ch of ex.channels) {
+      if (mirrors.has(ch.name)) continue;
       const sp = seg.rows.map((r) => num(r[ch.sp])).filter((v) => v != null);
       if (!sp.length) continue;
-      chans[ch.name] = { start: sp[0], end: sp[sp.length - 1] };
+      const start = sp[0], end = sp[sp.length - 1];
+      const span = Math.max(...sp) - Math.min(...sp);
+      const isRamp = span > Math.max(1e-9, Math.abs(start) * 1e-4);
+      // 只有一個取樣點的 step 分不出平台或斜坡——那只是轉態途中的一張快照，
+      // 不是配方寫的平台值。實測 step 28（1 秒）兩爐差 46°C，就是這樣被誤報的。
+      const tooShort = sp.length < 2;
+      // 平台：配方指定的就是那個值。
+      // 斜坡：起點是「上一步結束在哪」，不是配方寫的；配方寫的是速率與終點，
+      //       所以只比速率（每秒變化量），終點會受 1 秒取樣量化影響。
+      chans[ch.name] = { start, end, isRamp, tooShort, n: sp.length,
+        rate: isRamp && sp.length > 1 ? (end - start) / (sp.length - 1) : null };
     }
     // 同一個 label 若出現多段，各段分開記，避免把兩段的設定值混在一起
     let key = seg.label, i = 2;
     while (steps.has(key)) key = `${seg.label}#${i++}`;
     steps.set(key, { label: seg.label, n: seg.rows.length, channels: chans });
   }
-  return { runNo: ex.runNo, structure: ex.structure, product: ex.product, steps };
+  return { runNo: ex.runNo, structure: ex.structure, product: ex.product, steps, mirrors: [...mirrors] };
 }
 
 function compareRecipe(exA, exB, opt = {}) {
@@ -307,7 +343,9 @@ function compareRecipe(exA, exB, opt = {}) {
   const onlyInB = kb.filter((k) => !A.steps.has(k));
   const shared = ka.filter((k) => B.steps.has(k));
 
-  const spDiffs = [], durationDiffs = [];
+  const rateTol = opt.rateTol == null ? 0.05 : opt.rateTol;   // 斜坡速率的相對容差
+  const spDiffs = [], rampDiffs = [], durationDiffs = [], codeDiffs = [];
+  let shortSteps = 0;
   for (const k of shared) {
     const a = A.steps.get(k), b = B.steps.get(k);
     if (a.n !== b.n) durationDiffs.push({ step: k, aN: a.n, bN: b.n, delta: b.n - a.n });
@@ -315,9 +353,32 @@ function compareRecipe(exA, exB, opt = {}) {
     for (const c of chans) {
       const x = a.channels[c], y = b.channels[c];
       if (!x || !y) { spDiffs.push({ step: k, channel: c, missing: !x ? 'A' : 'B' }); continue; }
-      const dS = y.start - x.start, dE = y.end - x.end;
-      if (Math.abs(dS) > tol || Math.abs(dE) > tol) {
-        spDiffs.push({ step: k, channel: c, aStart: x.start, bStart: y.start, aEnd: x.end, bEnd: y.end, dStart: dS, dEnd: dE });
+      // StepCode 是步驟代碼（值像 18、1、3），不是製程設定值；差 1 代表流程編號不同，
+      // 不是「參數被改」。單獨列出來，不要混進設定值差異裡。
+      if (/^StepCode$/i.test(c)) {
+        if (Math.abs(y.start - x.start) > tol) codeDiffs.push({ step: k, a: x.start, b: y.start });
+        continue;
+      }
+      if (x.tooShort || y.tooShort) { shortSteps++; continue; }
+      if (x.isRamp || y.isRamp) {
+        // 斜坡只比速率；起點是繼承來的、終點受每秒取樣的量化影響，都不能直接比
+        if (x.isRamp !== y.isRamp) {
+          rampDiffs.push({ step: k, channel: c, kind: '一邊是斜坡一邊是平台', aRamp: x.isRamp, bRamp: y.isRamp });
+          continue;
+        }
+        const ra = x.rate, rb = y.rate;
+        if (ra != null && rb != null) {
+          const scale = Math.max(Math.abs(ra), Math.abs(rb));
+          if (scale > 0 && Math.abs(rb - ra) / scale > rateTol) {
+            rampDiffs.push({ step: k, channel: c, kind: '速率不同', aRate: ra, bRate: rb });
+          }
+        }
+        continue;
+      }
+      // 平台：配方寫的就是這個值，應該完全一致
+      const d = y.start - x.start;
+      if (Math.abs(d) > tol) {
+        spDiffs.push({ step: k, channel: c, aStart: x.start, bStart: y.start, aEnd: x.end, bEnd: y.end, dStart: d, dEnd: y.end - x.end });
       }
     }
   }
@@ -326,9 +387,11 @@ function compareRecipe(exA, exB, opt = {}) {
     productA: A.product, productB: B.product,
     sameProduct: A.product === B.product && A.structure === B.structure,
     stepsA: ka.length, stepsB: kb.length,
-    onlyInA, onlyInB, spDiffs, durationDiffs,
-    // 只有 SP 完全一致才算同一份配方；步長差異單獨看（有些 step 是條件結束不是時間結束）
-    sameRecipe: onlyInA.length === 0 && onlyInB.length === 0 && spDiffs.length === 0,
+    mirrors: A.mirrors,
+    onlyInA, onlyInB, spDiffs, rampDiffs, durationDiffs, codeDiffs, shortSteps,
+    // 平台設定值與斜坡速率都一致才算同一份配方；
+    // 步長單獨看（有些 step 是條件結束不是時間結束）
+    sameRecipe: onlyInA.length === 0 && onlyInB.length === 0 && spDiffs.length === 0 && rampDiffs.length === 0,
   };
 }
 
@@ -377,6 +440,14 @@ function selfTest() {
   is('抽出機台 MAT06', nm.reactor === 'MAT06');
   is('抽出 log 流水號 17351', nm.logSeq === '17351');
   is('不符格式時 runNo 為 null', parseRunName('/tmp/隨便.csv').runNo === null);
+  // 兩批真實檔名的樣式不同（_P_ vs _PUHGR_、.csv vs .txt、PRODUCT vs TECN2602001），
+  // 第一版寫死 _P_ 導致第二批整個抽不到。兩種都釘住，避免再退化。
+  const alt = parseRunName('H01A4N.TECN2602001.A4N.TECN090_M06_PUHGR_MAT06261042_17004.txt');
+  is('另一種檔名樣式也抽得到 RUN_NO 261042', alt.runNo === '261042');
+  is('另一種樣式的機台是 MAT06', alt.reactor === 'MAT06');
+  is('另一種樣式的結構是 H01A4N', alt.structure === 'H01A4N');
+  is('另一種樣式的產品是 A4N', alt.product === 'A4N');
+  is('不會把 TECN2602001 誤認成機台碼＋爐號', alt.reactor !== 'TECN26');
 
   console.log('\n── Control 過濾與分段 ──');
   const ex = extractRun(f, {});
@@ -509,10 +580,31 @@ Control == 1 的區間才算有效；以 StepLabel 分段；每段的整定期�
     if (r.onlyInA.length) console.log(`只有 A 有的 step（${r.onlyInA.length}）：${r.onlyInA.slice(0, 12).join(', ')}${r.onlyInA.length > 12 ? ' …' : ''}`);
     if (r.onlyInB.length) console.log(`只有 B 有的 step（${r.onlyInB.length}）：${r.onlyInB.slice(0, 12).join(', ')}${r.onlyInB.length > 12 ? ' …' : ''}`);
 
+    if (r.mirrors.length) {
+      console.log(`\n（${r.mirrors.join('、')} 的 SP 逐列等於 MV，那不是設定值而是量測值的鏡射，已排除）`);
+    }
+    if (r.rampDiffs.length) {
+      console.log(`\n斜坡速率有 ${r.rampDiffs.length} 處不同（斜坡只比速率：起點是上一步結束的位置，終點受每秒取樣量化）：`);
+      for (const d of r.rampDiffs.slice(0, 12)) {
+        if (d.kind === '速率不同') {
+          console.log(`  step ${String(d.step).padEnd(10)} ${d.channel.padEnd(18)} ${d.aRate.toFixed(4)} → ${d.bRate.toFixed(4)} /秒`);
+        } else {
+          console.log(`  step ${String(d.step).padEnd(10)} ${d.channel.padEnd(18)} ${d.kind}`);
+        }
+      }
+      if (r.rampDiffs.length > 12) console.log(`  …還有 ${r.rampDiffs.length - 12} 處`);
+    }
+    if (r.shortSteps) {
+      console.log(`（${r.shortSteps} 個 step×通道只有 1 秒，分不出平台或斜坡，已排除）`);
+    }
+    if (r.codeDiffs.length) {
+      console.log(`\nStepCode 有 ${r.codeDiffs.length} 處不同（那是步驟代碼不是製程參數，代表流程編號有出入）：`);
+      console.log('  ' + r.codeDiffs.slice(0, 10).map((d) => `step ${d.step}: ${d.a}→${d.b}`).join('　'));
+    }
     if (!r.spDiffs.length && !r.onlyInA.length && !r.onlyInB.length) {
-      console.log('\n✓ 設定值（SP）完全一致——這兩爐跑的是同一份配方。');
+      console.log('\n✓ 平台設定值完全一致。');
     } else {
-      console.log(`\n設定值有 ${r.spDiffs.length} 處不同：`);
+      console.log(`\n平台設定值有 ${r.spDiffs.length} 處不同：`);
       for (const d of r.spDiffs.slice(0, 25)) {
         if (d.missing) { console.log(`  step ${String(d.step).padEnd(10)} ${d.channel.padEnd(18)} 只有 ${d.missing === 'A' ? 'B' : 'A'} 有這個通道`); continue; }
         console.log(`  step ${String(d.step).padEnd(10)} ${d.channel.padEnd(18)} ` +

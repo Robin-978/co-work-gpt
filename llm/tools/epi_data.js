@@ -60,16 +60,24 @@ function parseDelimited(text) {
 }
 
 // 各家 MES 的欄位名稱都不一樣，這裡放常見寫法。
-// ⚠ 這份對照表是通用猜測，不是你家系統的實際欄位——第一次接資料時請對著真實表頭確認、補上。
+// 標「實測」的是從真實 MES 匯出確認過的欄名，其餘是通用猜測——
+// 第一次接資料時請對著真實表頭確認、補上你家系統的寫法。
 const COLUMN_ALIASES = {
-  runId:   ['爐號', '爐次', 'RunID', 'Run ID', 'RunNo', 'Run No', 'LotID', 'Lot ID', '批號'],
-  machine: ['機台', '機台號', '機台編號', 'Machine', 'Tool', 'ToolID', 'Reactor', 'EquipmentID'],
-  product: ['產品', '產品別', '料號', 'Product', 'PartNo', 'Part No', 'Device', 'Recipe'],
-  date:    ['日期', '時間', '成長日期', 'Date', 'DateTime', 'StartTime', 'Start Time', 'Timestamp'],
+  runId:   ['RUN_NO',   // 實測（MAT06 engineer 匯出）
+            '爐號', '爐次', 'RunID', 'Run ID', 'RunNo', 'Run No', 'LotID', 'Lot ID', '批號'],
+  machine: ['REACTOR',  // 實測
+            '機台', '機台號', '機台編號', 'Machine', 'Tool', 'ToolID', 'EquipmentID'],
+  product: ['Product',  // 實測
+            '產品', '產品別', '料號', 'PartNo', 'Part No', 'Device', 'Recipe', 'STRUCTURE'],
+  date:    ['G_DATE',   // 實測
+            '日期', '時間', '成長日期', 'Date', 'DateTime', 'StartTime', 'Start Time', 'Timestamp'],
+  pos:     ['POS_NO',   // 實測：一爐多片時的片號
+            '位置', 'Position', 'Slot', 'WaferNo', 'Wafer No'],
 };
 
+// 底線與連字號也要去掉，否則 RUN_NO 對不上 RunNo——實測踩過這個坑
 function normHeader(h) {
-  return String(h).replace(/[\s　]/g, '').replace(/[（(].*?[）)]/g, '').toLowerCase();
+  return String(h).replace(/[\s　_-]/g, '').replace(/[（(].*?[）)]/g, '').toLowerCase();
 }
 
 function mapColumns(header) {
