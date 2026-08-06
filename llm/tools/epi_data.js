@@ -24,18 +24,20 @@ const fs = require('fs');
 
 // 台灣的 MES／Excel 匯出常常是 Big5 而不是 UTF-8，直接當 UTF-8 讀會整片變亂碼。
 // Node 內建的 TextDecoder 支援 big5，不需要額外套件。
-function decode(buf) {
+function decodeWithInfo(buf) {
   if (buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
-    return new TextDecoder('utf-8').decode(buf.subarray(3));   // UTF-8 BOM
+    return { text: new TextDecoder('utf-8').decode(buf.subarray(3)), encoding: 'utf-8 (BOM)' };
   }
   const asUtf8 = new TextDecoder('utf-8', { fatal: false }).decode(buf);
   // U+FFFD 是解碼失敗的替代字元；出現得多就代表這根本不是 UTF-8
   const bad = (asUtf8.match(/�/g) || []).length;
   if (bad > asUtf8.length * 0.002) {
-    try { return new TextDecoder('big5').decode(buf); } catch { /* 落回 UTF-8 */ }
+    try { return { text: new TextDecoder('big5').decode(buf), encoding: 'big5' }; }
+    catch { /* 落回 UTF-8 */ }
   }
-  return asUtf8;
+  return { text: asUtf8, encoding: 'utf-8' };
 }
+const decode = (buf) => decodeWithInfo(buf).text;
 
 // 逗號或 Tab 分隔，支援雙引號包住的欄位（Excel 匯出必備）
 function parseDelimited(text) {
@@ -537,7 +539,7 @@ function selfTest() {
 }
 
 module.exports = {
-  load, loadFile, select, values,
+  load, loadFile, select, values, decode, decodeWithInfo, parseDelimited, parseDate,
   runStats, cpk, groupStats, correlate, outliers, spcRules, runDetail, listRuns,
   demoCsv, selfTest, COLUMN_ALIASES,
 };
