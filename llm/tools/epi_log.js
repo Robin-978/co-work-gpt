@@ -217,6 +217,66 @@ function extractRun(file, opt = {}) {
   return { ...run, channels: chans, features };
 }
 
+// ─────────────────────────────────────────────────────────────
+// 通道分族：44 個通道全放進管制圖只會被雜訊淹掉
+// ─────────────────────────────────────────────────────────────
+// 現場點名的三族，而且它們要用不同的指標：
+//   source  前驅物源流量 —— 直接決定組成與成長速率，看 SP/MV 追隨
+//   temp    反應器溫度   —— 實測 1°C 就讓 LEHI_RS 動 5σ，看 SP/MV 追隨
+//   dp      壓差／排氣   —— 這幾個的 SP 逐列等於 MV（鏡射），追隨誤差恆為 0，
+//                           要看的是「水位與漂移」：dP_Filter 慢慢爬升＝濾網在堵
+const CHANNEL_GROUPS = {
+  source: (n) => /\.source$/.test(n),
+  temp: (n) => /temp$/i.test(n),
+  dp: (n) => /^dP_|^dT_|^Ptrap\./i.test(n),
+  push: (n) => /\.push$/.test(n),
+  press: (n) => /\.press$/.test(n),
+};
+function groupOf(name) {
+  for (const [g, test] of Object.entries(CHANNEL_GROUPS)) if (test(name)) return g;
+  return 'other';
+}
+
+// 這個產品沒用到的通道，整爐 SP 都不變——放進寬表只是佔欄位。
+// 先前現場確認過 AsH3_2 / Si2H6_3 / TMGa_3 就是這種情況。
+function isActive(ex, ch) {
+  const seen = new Set();
+  for (const seg of ex.segments) {
+    for (const r of seg.rows) { seen.add(r[ch.sp]); if (seen.size > 1) return true; }
+  }
+  return false;
+}
+
+// dp 這族要的是整爐的水位與漂移，不是逐 step 的追隨誤差
+function levelStats(ex, ch) {
+  const v = [];
+  for (const seg of ex.segments) for (const r of seg.rows) { const x = num(r[ch.mv]); if (x != null) v.push(x); }
+  if (!v.length) return null;
+  const half = Math.floor(v.length / 2);
+  return {
+    channel: ch.name, n: v.length,
+    mean: mean(v), std: sd(v), min: Math.min(...v), max: Math.max(...v),
+    // 爐內漂移：後半段平均減前半段平均，比「最後一點減第一點」耐雜訊
+    drift: mean(v.slice(half)) - mean(v.slice(0, half)),
+  };
+}
+
+// 依分族挑出這一爐真正該盯的通道
+function focusChannels(ex, groups = ['source', 'temp', 'dp']) {
+  const want = new Set(groups);
+  const out = { tracked: [], level: [], skippedInactive: [] };
+  const mirrors = mirrorChannels(ex);
+  for (const ch of ex.channels) {
+    const g = groupOf(ch.name);
+    if (!want.has(g)) continue;
+    if (!isActive(ex, ch)) { out.skippedInactive.push(ch.name); continue; }
+    // 鏡射通道（含整個 dp 族）沒有追隨誤差可談，只能看水位
+    if (g === 'dp' || mirrors.has(ch.name)) out.level.push(ch);
+    else out.tracked.push(ch);
+  }
+  return out;
+}
+
 // 每個通道跨所有 step 的摘要——一爐幾千列特徵，人要看的是這個
 function channelSummary(ex) {
   const by = new Map();
@@ -261,21 +321,44 @@ function channelSummary(ex) {
   return out.sort((a, b) => Math.abs(b.biasWorst || 0) - Math.abs(a.biasWorst || 0));
 }
 
-// 一爐一列：把摘要攤平成寬表，這才是接得上 RUN_NO 和量測資料的形狀
-function runRow(ex) {
+// 一爐一列：把摘要攤平成寬表，這才是接得上 RUN_NO 和量測資料的形狀。
+// groups 給 null 就是全部通道（274 欄，只適合探索）；
+// 給 ['source','temp','dp'] 會收斂到現場真正會盯的那十來個，管制圖才不會被雜訊淹掉。
+function runRow(ex, groups) {
   const row = {
     RUN_NO: ex.runNo, REACTOR: ex.reactor, STRUCTURE: ex.structure, PRODUCT: ex.product,
     LOG_SEQ: ex.logSeq, START: ex.startTime, END: ex.endTime,
     VALID_S: ex.validRows, IDLE_S: ex.droppedRows, STEPS: ex.segments.length,
   };
+  if (!groups) {
+    for (const s of channelSummary(ex)) {
+      const k = s.channel.replace(/[^\w.]/g, '_');
+      row[`${k}|bias`] = s.biasMean;
+      row[`${k}|biasWorst`] = s.biasWorst;
+      row[`${k}|errStd`] = s.errStdMean;
+      row[`${k}|settleMax`] = s.settleMax;
+      row[`${k}|overshootMax`] = s.overshootMax;
+    }
+    return row;
+  }
+
+  const focus = focusChannels(ex, groups);
+  const tracked = new Set(focus.tracked.map((c) => c.name));
   for (const s of channelSummary(ex)) {
+    if (!tracked.has(s.channel)) continue;
     const k = s.channel.replace(/[^\w.]/g, '_');
-    row[`${k}|bias`] = s.biasMean;
-    row[`${k}|biasWorst`] = s.biasWorst;
-    row[`${k}|errStd`] = s.errStdMean;
-    row[`${k}|settleMax`] = s.settleMax;
-    row[`${k}|overshootMax`] = s.overshootMax;
-    row[`${k}|notSettled`] = s.notSettled;
+    row[`${k}|bias`] = s.biasMean;          // 系統性偏高／偏低
+    row[`${k}|errStd`] = s.errStdMean;      // 穩態抖動
+    row[`${k}|settleMax`] = s.settleMax;    // 最久整定：加熱器或流量計退化的早期訊號
+  }
+  // dp 這族沒有 SP 可比，看的是水位與爐內漂移
+  for (const ch of focus.level) {
+    const st = levelStats(ex, ch);
+    if (!st) continue;
+    const k = ch.name.replace(/[^\w.]/g, '_');
+    row[`${k}|level`] = st.mean;
+    row[`${k}|drift`] = st.drift;
+    row[`${k}|max`] = st.max;
   }
   return row;
 }
@@ -515,19 +598,42 @@ function selfTest() {
   const miss = compareRecipe(ex, extractRun(f4, {}));
   is('少一個 step 會被指出來', miss.onlyInA.includes('S3'));
 
+  console.log('\n── 通道分族 ──');
+  is('X 歸到 other（不屬於三族）', groupOf('X') === 'other');
+  is('AsH3_1.source → source', groupOf('AsH3_1.source') === 'source');
+  is('Reactor.temp → temp', groupOf('Reactor.temp') === 'temp');
+  is('dP_Filter → dp', groupOf('dP_Filter') === 'dp');
+  is('dT_Exhaust → dp', groupOf('dT_Exhaust') === 'dp');
+  is('Ptrap.press → dp（不能被 .press 規則搶走）', groupOf('Ptrap.press') === 'dp');
+  is('TMGa_2.press → press 而不是 dp', groupOf('TMGa_2.press') === 'press');
+  is('AsH3_1.push → push', groupOf('AsH3_1.push') === 'push');
+
+  // 整爐 SP 沒動過＝這個產品沒用到，要排除
+  const rows3 = ['Timestamp,StepLabel,Control_MV,A.source_SP,A.source_MV,B.source_SP,B.source_MV'];
+  for (let i = 0; i < 12; i++) {
+    rows3.push(`2026-07-06 00:00:${String(i).padStart(2, '0')},S,1,${10 + i}.0000,${10 + i}.0000,5.0000,5.0000`);
+  }
+  const f5 = path.join(os.tmpdir(), 'P5_M06_P_MAT06261320_17360.csv');
+  fs.writeFileSync(f5, rows3.join('\n'));
+  const ex5 = extractRun(f5, { minSteady: 3 });
+  const fo = focusChannels(ex5, ['source']);
+  is('SP 有動的通道留下', fo.tracked.concat(fo.level).some((c) => c.name === 'A.source'));
+  is('SP 整爐沒動的通道被排除', fo.skippedInactive.includes('B.source'));
+
   console.log('\n── 一爐一列 ──');
   const row = runRow(ex);
   is('帶著 RUN_NO', row.RUN_NO === '261314');
   is('帶著機台', row.REACTOR === 'MAT06');
   is('有效秒數正確', row.VALID_S === 60);
 
-  [f, f2, f3, f4].forEach((p2) => { try { fs.unlinkSync(p2); } catch { /* 已刪就算了 */ } });
+  [f, f2, f3, f4, f5].forEach((p2) => { try { fs.unlinkSync(p2); } catch { /* 已刪就算了 */ } });
   console.log(`\n${fail === 0 ? '全部通過' : '有失敗項目'}：${pass} 通過，${fail} 失敗\n`);
   return fail === 0;
 }
 
 module.exports = { parseRunName, loadRun, extractRun, channelSummary, runRow, stepFeatures,
-                   recipeOf, compareRecipe, toCsv, selfTest, NAME_PATTERN };
+                   recipeOf, compareRecipe, mirrorChannels, groupOf, isActive, levelStats,
+                   focusChannels, CHANNEL_GROUPS, toCsv, selfTest, NAME_PATTERN };
 
 // ─────────────────────────────────────────────────────────────
 // CLI
@@ -550,6 +656,8 @@ if (require.main === module) {
   --level-frac <比例>  穩態帶的地板＝SP 量級的幾成，預設 0.005
   --min-steady <秒>    穩態至少要幾秒才納入統計，預設 5
   --run-row            輸出「一爐一列」的寬表（接 RUN_NO 用）
+  --groups <族...>     只留這幾族通道，預設 source,temp,dp；給 all 就是全部 44 個
+  --focus              列出這一爐該盯哪些通道（分族 + 濾掉這產品沒用到的）
   -o <檔名>            寫出 CSV
   --test               自我測試
 
@@ -567,6 +675,8 @@ Control == 1 的區間才算有效；以 StepLabel 分段；每段的整定期�
     minSteady: parseInt(val('--min-steady', '5'), 10),
     channels: val('--channel', '') ? [val('--channel', '')] : null,
   };
+  const groupsArg = val('--groups', 'source,temp,dp');
+  const groups = groupsArg === 'all' ? null : groupsArg.split(',').map((x) => x.trim()).filter(Boolean);
 
   if (flag('--compare')) {
     if (files.length !== 2) { console.error('--compare 需要剛好兩個檔案。'); process.exit(1); }
@@ -621,6 +731,39 @@ Control == 1 的區間才算有效；以 StepLabel 分段；每段的整定期�
       console.log('  步長差異單獨看：有些 step 是條件結束而不是時間結束，差幾秒不一定代表配方被改。');
     }
     console.log(`\n結論：${r.sameRecipe ? '同一份配方' : '配方不同——開爐前要先確認是不是載錯或被改過'}`);
+    process.exit(0);
+  }
+
+  if (flag('--focus')) {
+    for (const f of files) {
+      const ex = extractRun(f, { ...opt, channels: null });
+      const fo = focusChannels(ex, groups || ['source', 'temp', 'dp']);
+      console.log(`\n${'═'.repeat(72)}`);
+      console.log(`RUN_NO ${ex.runNo}　產品 ${ex.product}　該盯的通道`);
+      console.log('─'.repeat(72));
+      const byGroup = new Map();
+      for (const c of fo.tracked) {
+        const g = groupOf(c.name);
+        if (!byGroup.has(g)) byGroup.set(g, []);
+        byGroup.get(g).push(c.name);
+      }
+      for (const [g, list] of byGroup) {
+        console.log(`【${g}】${list.length} 個　看 SP/MV 追隨（偏差、抖動、整定）`);
+        console.log('  ' + list.join(', '));
+      }
+      if (fo.level.length) {
+        console.log(`【dp／鏡射】${fo.level.length} 個　SP 逐列等於 MV，沒有追隨誤差可談，看水位與爐內漂移`);
+        for (const c of fo.level) {
+          const st = levelStats(ex, c);
+          console.log(`  ${c.name.padEnd(16)} 水位 ${st.mean.toFixed(3)}　爐內漂移 ${st.drift > 0 ? '+' : ''}${st.drift.toFixed(3)}　範圍 ${st.min.toFixed(2)}~${st.max.toFixed(2)}`);
+        }
+      }
+      if (fo.skippedInactive.length) {
+        console.log(`\n這一爐整爐 SP 沒動過，代表這個產品沒用到（${fo.skippedInactive.length} 個，已排除）：`);
+        console.log('  ' + fo.skippedInactive.join(', '));
+      }
+      console.log(`\n合計要盯 ${fo.tracked.length + fo.level.length} 個通道（全部 SP/MV 通道有 ${ex.channels.length} 個）`);
+    }
     process.exit(0);
   }
 
@@ -705,9 +848,10 @@ Control == 1 的區間才算有效；以 StepLabel 分段；每段的整定期�
   const out = val('-o', '');
   if (out) {
     if (flag('--run-row')) {
-      const rows = exs.map(runRow);
+      const rows = exs.map((e) => runRow(e, groups));
       fs.writeFileSync(out, toCsv(rows));
-      console.log(`\n寫出一爐一列的寬表：${out}（${rows.length} 爐 × ${Object.keys(rows[0]).length} 欄）`);
+      console.log(`\n寫出一爐一列的寬表：${out}（${rows.length} 爐 × ${Object.keys(rows[0]).length} 欄）` +
+        (groups ? `　只含 ${groups.join('／')} 族` : '　含全部通道'));
       console.log('這張表的 RUN_NO 可以直接對上量測資料的 RUN_NO。');
     } else {
       const rows = exs.flatMap((ex) => ex.features.filter((f) => !f.error && !f.tooShort).map((f) => ({
