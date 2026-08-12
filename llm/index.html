@@ -198,7 +198,7 @@ footer a{color:var(--s1)}
 
   <div class="sliders">
     <div class="slider">
-      <div class="head"><span>產生長度</span><b id="lenVal">36</b></div>
+      <div class="head"><span>產生長度上限</span><b id="lenVal">36 字</b></div>
       <input id="len" type="range" min="1" max="200" value="36">
       <div id="lenHint" class="hint"></div>
     </div>
@@ -216,6 +216,7 @@ footer a{color:var(--s1)}
     </div>
   </div>
   <div class="toggles">
+    <button id="stopEosBtn" class="chip" aria-pressed="true">✂ 一句話講完就停</button>
     <button id="detailBtn" class="chip" aria-pressed="true">🐢 每個字都完整演示</button>
     <button id="autoscrollBtn" class="chip" aria-pressed="true">🧭 自動捲動到目前步驟</button>
   </div>
@@ -329,6 +330,9 @@ footer a{color:var(--s1)}
   <h2><span class="tag">Step 6</span>輸出並回到第一步 Output</h2>
   <p class="lead">選中的字被<b>接回輸入的尾巴</b>，然後整個流程再跑一次——這就是「自迴歸（autoregressive）」。
     你看到 ChatGPT 一個字一個字吐出來，就是這個迴圈在轉。</p>
+  <p class="lead">那什麼時候停？<b>模型自己決定。</b>當它算出來機率最高的下一個字是句尾符號（這個模型是「。」），
+    迴圈就結束——所以答案不會硬去塞滿你設定的長度上限。大模型用的是同一招，只是句尾符號換成字典裡一個專門的
+    <code>&lt;eos&gt;</code> token。把上面的「✂ 一句話講完就停」關掉，就能看到它硬撐下去會變成什麼樣子。</p>
   <div class="viz"><div class="outBox" id="outBox"><span class="p" id="outPrompt"></span><span class="g" id="outGen"></span><span class="caret"></span></div></div>
   <div class="loopNote" id="loopNote"><span class="arrow">↻</span><span>把新的字加回輸入 → 回到 Step 1，產生下一個字</span></div>
   <div class="readout" id="r6">等待開始…</div>
@@ -492,7 +496,11 @@ function paintRamp(el, fn) {
    3. 動畫執行器
    ========================================================== */
 const $ = (id) => document.getElementById(id);
-let runId = 0, paused = false, speed = 1, detail = true, autoscroll = true;
+let runId = 0, paused = false, speed = 1, detail = true, autoscroll = true, stopAtEos = true;
+
+// 語料裡每一句都以「。」結尾、再用換行分隔，所以這兩個字元就是這個模型學到的「講完了」。
+// 大模型是靠一個專門的 <eos> token 做同一件事——差別只在那個 token 是刻意加進字典的。
+const STOP_CHARS = new Set(['。', '\n']);
 const CANCEL = { cancel: true };
 const raf = () => new Promise((r) => requestAnimationFrame(r));
 
@@ -945,19 +953,27 @@ async function start() {
   const N = parseInt($('len').value, 10);
   for (let i = 1; i <= 6; i++) stageEls[i].classList.remove('visited');
 
+  let made = 0, hitEos = false;
   try {
     for (let i = 0; i < N; i++) {
-      $('genProgress').textContent = '正在產生第 ' + (i + 1) + ' / ' + N + ' 個字';
+      $('genProgress').textContent = '正在產生第 ' + (i + 1) + ' 個字（上限 ' + N + '）';
       const ctx = tokens.slice(-CFG.B);
       const nP = Math.max(0, nPrompt - (tokens.length - ctx.length));
       const next = await runOnce(ctx, nP, i === 0);
       tokens.push(next);
+      made++;
       checkAlive(my);
+      // 句子結束就收工，不用把長度上限塞滿
+      if (stopAtEos && STOP_CHARS.has(VOCAB[next])) { hitEos = true; break; }
       await wait(160);
     }
-    $('genProgress').textContent = '✓ 產生完畢，共 ' + N + ' 個字';
+    $('genProgress').textContent = hitEos
+      ? '✓ 句子講完，停在第 ' + made + ' 個字（上限 ' + N + '）'
+      : '✓ 產生完畢，共 ' + made + ' 個字';
     for (let i = 1; i <= 6; i++) stageEls[i].classList.add('visited');
-    $('r6').innerHTML += ' <b>／ 產生完畢。</b>';
+    $('r6').innerHTML += hitEos
+      ? ' <b>／ 模型吐出了句尾符號，這一句話講完了——所以停在 ' + made + ' 個字，沒有把上限 ' + N + ' 塞滿。</b>'
+      : ' <b>／ 產生完畢。</b>';
   } catch (e) {
     if (e !== CANCEL) throw e;
   } finally {
@@ -996,25 +1012,29 @@ $('miniStop').onclick = () => $('stopBtn').click();
 document.querySelectorAll('.preset').forEach((b) => {
   b.onclick = () => { $('prompt').value = b.textContent; if (!running) start(); };
 });
-// 產生長度可以拉到超過上下文長度，這時視窗會往前滑、開頭會被擠掉——值得講出來
+// 這是上限不是目標值：開著「一句話講完就停」時多半提早收工，但拉太長仍有兩個副作用值得講出來
 function syncLenHint() {
   const n = parseInt($('len').value, 10);
   const promptLen = Array.from($('prompt').value).length;
   const bits = [];
+  if (stopAtEos) {
+    bits.push('這是上限。模型吐出「。」或換行就代表這句話講完了，會提早停下來。');
+  }
   if (promptLen + n > CFG.B) {
-    bits.push('提示 ' + promptLen + ' 字 ＋ 產生 ' + n + ' 字已經超過 ' + CFG.B +
-      ' 個 token 的上下文，最前面的字會被擠出視窗——模型從那一步起就看不到開頭了。');
+    bits.push('提示 ' + promptLen + ' 字 ＋ 產生 ' + n + ' 字' + (stopAtEos ? '（若真的一路產生到上限）' : '') +
+      '已經超過 ' + CFG.B + ' 個 token 的上下文，最前面的字會被擠出視窗——模型從那一步起就看不到開頭了。');
   }
   if (detail && n > 40) {
-    bits.push('🐢「每個字都完整演示」跑 ' + n + ' 次會很久，想快一點就切成「只完整演示第一個字」。');
+    bits.push('🐢「每個字都完整演示」最多要跑 ' + n + ' 次，想快一點就切成「只完整演示第一個字」。');
   }
   $('lenHint').innerHTML = bits.join('<br>');
 }
-$('len').oninput = function () { $('lenVal').textContent = this.value; syncLenHint(); };
+$('len').oninput = function () { $('lenVal').textContent = this.value + ' 字'; syncLenHint(); };
 $('prompt').addEventListener('input', syncLenHint);
 $('temp').oninput = function () { $('tempVal').textContent = (this.value / 100).toFixed(2); };
 $('topk').oninput = function () { $('topkVal').textContent = this.value; };
 $('spd').oninput = function () { speed = this.value / 10; $('spdVal').textContent = speed.toFixed(1) + '×'; };
+$('stopEosBtn').onclick = function () { stopAtEos = !stopAtEos; this.setAttribute('aria-pressed', String(stopAtEos)); this.textContent = stopAtEos ? '✂ 一句話講完就停' : '➡ 一路產生到上限'; syncLenHint(); };
 $('detailBtn').onclick = function () { detail = !detail; this.setAttribute('aria-pressed', String(detail)); this.textContent = detail ? '🐢 每個字都完整演示' : '🐇 只完整演示第一個字'; syncLenHint(); };
 $('autoscrollBtn').onclick = function () { autoscroll = !autoscroll; this.setAttribute('aria-pressed', String(autoscroll)); };
 stepEls.forEach((e) => { e.onclick = () => { const n = +e.dataset.go; stageEls[n].scrollIntoView({ block: 'start' }); }; });

@@ -177,6 +177,24 @@ H = -Σ p·log₂(p)     // p = softmax(logits / temperature) over all V
 
 這是頁面上唯一能反映「模型對整體有多猶豫」的數字；只看 Top-K 的長條會嚴重低估不確定性。
 
+### 停止條件
+
+```js
+const STOP_CHARS = new Set(['。', '\n']);
+```
+
+語料是 437 句、每句以「。」結尾、用 `\n` 串起來（`corpus.js` 的 `buildCorpus()`），所以這兩個字元就是這個模型學到的句尾。產生迴圈在 `tokens.push(next)` 之後檢查，命中就 `break`：
+
+```js
+if (stopAtEos && STOP_CHARS.has(VOCAB[next])) { hitEos = true; break; }
+```
+
+因此 `len` 滑桿是**上限**而不是目標值。實測六個範例的產出落在 9–20 字，上限設 120 也一樣。
+
+**為什麼不需要另外加一個 `<eos>` token：** 大模型會在字典裡放一個專門的結束符號，訓練時擺在每個樣本結尾。這裡「。」本來就在字典裡、而且在語料裡永遠出現在句子結尾，這個位置的統計已經足夠 — 加一個新符號只是多一個 embedding 要學。若日後語料改成句尾不一定是「。」（例如加入問句、條列），就得回頭改 `STOP_CHARS`，或真的加一個結束符號並重訓。
+
+`stopAtEos` 由 `#stopEosBtn` 切換，關掉之後會一路跑到上限 — 保留這個開關是為了能演示「不停下來會變成什麼樣」。
+
 **抽樣**是累積機率法：`r = Math.random()`，沿著 `probs` 累加，第一個超過 `r` 的就是選中的字。轉盤上指針的位置直接就是 `r`，所以畫面顯示的是真的抽籤過程，不是事後補畫。
 
 ---
@@ -238,13 +256,13 @@ const d = isFirst || detail ? 1 : 0.34;
 沒有框架，就是幾個模組層級變數：
 
 ```js
-let runId = 0, paused = false, speed = 1, detail = true, autoscroll = true;
+let runId = 0, paused = false, speed = 1, detail = true, autoscroll = true, stopAtEos = true;
 let running = false;
 ```
 
 - `setStage(n)` 切換六個 `<section>` 的 `on` / `visited` class 與步驟列的 `active` / `done`，並在 `autoscroll` 開啟時捲到該區塊（偏移 76px 讓開置頂步驟列）。
 - `syncCtrl()` 把主要按鈕的狀態同步到步驟列的迷你按鈕。
-- `syncLenHint()` 在產生長度或提示改變時重算提示文字：超過 `CFG.B` 就警告視窗會滑動、`detail && n > 40` 就警告會跑很久。
+- `syncLenHint()` 在產生長度、提示、或 `stopAtEos` / `detail` 改變時重算提示文字：`stopAtEos` 開著就說明這是上限、超過 `CFG.B` 就警告視窗會滑動、`detail && n > 40` 就警告會跑很久。
 - 鍵盤：`Space` = 開始／暫停、`Escape` = 停止；`e.target.tagName === 'INPUT'` 時直接 return（否則輸入框打不了空白）。
 
 **所有維度文案都從 `cfg` 填入**，不是寫死的：規格列（`specs`）、`.dimC` / `.dimF` 這些 span、頁尾的參數量與語料字數。換一個不同規模的模型重新 build，頁面不會說錯自己的規格。
@@ -279,6 +297,7 @@ node build.js ../index.html
 | 改文案、改版面、加說明段落 | 改 `page.template.html`，重跑 `build.js` |
 | 換一個不同規模的模型 | 重新訓練產生新的 `weights.json`，重跑 `build.js`。頁面會自動反映新的 `cfg`，不用改 HTML |
 | 改預設溫度／長度／Top-K | 改 `<input>` 的 `value` 與旁邊 `<b>` 的顯示值（兩處都要改，否則首屏顯示會對不上） |
+| 換語料，句尾不再是「。」 | 改 `STOP_CHARS`；若新語料的句尾沒有固定符號，就得在字典裡加一個結束符號並重訓 |
 | 改熱圖顯示的 token 數 | 改 `DISP` |
 | 改 Step 4 顯示哪一層 | `runOnce` 裡的 `const L = CFG.L - 1`（`resize` handler 裡也有一份，要一起改） |
 | 加第七個步驟 | 新增 `<section id="s7">`、加進 `stageEls` / 步驟列、在 `runOnce` 裡插 `setStage(7)`。`setStage` 裡的 `1..6` 迴圈上限也要改 |
@@ -305,7 +324,8 @@ Playwright 實跑過的項目，改動之後值得重跑一遍：
 - 注意力頭切換會同步重畫（包含停止之後）。
 - 字典外的輸入會出現警告；全部都在字典外會拒絕開始。
 - 空白與換行字元在 Step 1 的 chip 與 Step 6 的輸出框裡都渲染正確。
-- 四個滑桿的上下限與提示條件（超過上下文、詳細模式 > 40 字）。
+- 四個滑桿的上下限與提示條件（上限說明、超過上下文、詳細模式 > 40 字）。
+- **提早停止**：開著 `stopAtEos` 時產出停在句尾符號且短於上限；關掉時剛好跑滿上限、句號不會中止。
 - **實跑 60 字**，確認滑動視窗之下續寫仍然完整。
 
 ---
