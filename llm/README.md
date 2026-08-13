@@ -72,10 +72,15 @@ STEPS=3000 DIM=48 HEADS=3 FF=128 BATCH=12 LR=3e-3 node run_train.js
 - `epi_log.js` — 把一爐機台 log（每秒一列、上萬列）壓成每 step 每通道的特徵；`--compare` 比對兩爐配方
 - `epi_data.js` — EPI 生產資料的查詢函式層：讀 CSV/TSV（UTF-8 與 Big5 自動辨識）、統計、Cpk、分組比較、SPC 判異、離群爐次、相關
 - `expert.js` — 把三個領域包成一份「LLM 可呼叫的工具目錄」，含 function-calling 用的 JSON 定義
-- `page.template.html` — 網頁模板，`__WEIGHTS__` 會被換成權重
+- `page.template.html` — 網頁模板，`__WEIGHTS__` 會被換成權重、`__DOC_USER__` / `__DOC_TECH__` 會被換成兩份手冊
+- `md.js` — 極小的 Markdown → HTML 轉換器，只支援 `docs/*.md` 用到的語法（21 項自我測試：`node md.js --test`）
 - `build.js` — 打包成單一 HTML
 
 只改網頁不重訓的話，編輯 `page.template.html` 後跑 `node build.js ../index.html` 即可。
+
+**兩份手冊也在同一個 HTML 裡。** 頁面最下面有「附錄：手冊」，內容在建置時從 `llm/docs/*.md` 轉進去，
+所以 `index.html` 一個檔案交出去就夠了，不必再附說明檔。要改手冊只改 `.md` 再 build——
+**不要改頁面裡那一份**，下次建置會被整個覆蓋。
 
 ## 擴充字典（讓模型認得更多字）
 
@@ -501,7 +506,7 @@ node epi_log.js 機台log.csv                         三張摘要表
 node epi_log.js 機台log.csv --channel Reactor.temp   單通道逐 step
 node epi_log.js A.csv B.csv --compare               比對兩爐的配方
 node epi_log.js 機台log.csv --run-row -o run.csv     一爐一列（接 RUN_NO）
-node epi_log.js --test                              34 項自我測試
+node epi_log.js --test                              49 項自我測試
 ```
 
 **`SP` 是 recipe 的設定值，`MV` 是機台實際記錄值。** 這兩個要分開比，

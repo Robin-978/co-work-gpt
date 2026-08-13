@@ -149,6 +149,42 @@ input[type=range]{width:100%;accent-color:var(--s1)}
 .loopNote.pulse{border-color:var(--s4);color:#ffd9a3;background:rgba(201,133,0,.10)}
 .loopNote .arrow{font-size:18px}
 
+/* ---------- 附錄：手冊 ---------- */
+.docs details{border:1px solid var(--line);border-radius:var(--radius);background:var(--surface-1);margin-top:14px;overflow:hidden}
+.docs details[open]{background:var(--surface-1);border-color:var(--line-strong)}
+.docs summary{
+  cursor:pointer;padding:16px 18px;list-style:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;
+  font-size:15.5px;color:var(--text-primary);
+}
+.docs summary::-webkit-details-marker{display:none}
+.docs summary::before{content:'▸';color:var(--s1);font-size:13px;transform:translateY(-1px)}
+.docs details[open] summary::before{content:'▾'}
+.docs summary:hover{background:var(--surface-2)}
+.docs summary .sum{font-size:13px;color:var(--text-muted);font-weight:400}
+.docs .md{padding:2px 18px 22px;border-top:1px solid var(--line);font-size:14.5px;color:var(--text-secondary)}
+.docs .md h3{font-size:19px;color:var(--text-primary);margin:26px 0 10px;padding-top:14px;border-top:1px solid var(--line)}
+.docs .md h3:first-child{border-top:0;padding-top:0;margin-top:18px}
+.docs .md h4{font-size:16px;color:var(--text-primary);margin:22px 0 8px}
+.docs .md h5{font-size:14.5px;color:var(--s1);margin:18px 0 6px;letter-spacing:.02em}
+.docs .md p{margin:9px 0}
+.docs .md strong{color:var(--text-primary)}
+.docs .md ul,.docs .md ol{margin:9px 0;padding-left:22px}
+.docs .md li{margin:5px 0}
+.docs .md code{font-family:var(--mono);font-size:.9em;background:var(--surface-3);padding:1px 5px;border-radius:6px;color:#cfe2fb}
+.docs .md pre{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;overflow-x:auto;margin:12px 0}
+.docs .md pre code{background:none;padding:0;color:var(--text-secondary);font-size:12.5px;line-height:1.6;white-space:pre}
+.docs .md blockquote{margin:12px 0;padding:10px 14px;border-left:3px solid var(--s1);background:var(--surface-2);border-radius:0 10px 10px 0}
+.docs .md blockquote p{margin:0}
+.docs .md hr{border:0;border-top:1px solid var(--line);margin:20px 0}
+.docs .md a{color:var(--s1)}
+.docs .mdTableWrap{overflow-x:auto;margin:12px 0}
+.docs .md table{border-collapse:collapse;font-size:13.5px;min-width:min-content}
+.docs .md th,.docs .md td{border:1px solid var(--line);padding:7px 11px;text-align:left;vertical-align:top}
+.docs .md th{background:var(--surface-2);color:var(--text-primary);font-weight:600;white-space:nowrap}
+.docsLink{margin:14px 0 0;font-size:13px;color:var(--text-muted)}
+.docsLink a{color:var(--s1);text-decoration:none;border-bottom:1px solid rgba(57,135,229,.4)}
+.docsLink a:hover{border-bottom-color:var(--s1)}
+
 /* ---------- misc ---------- */
 canvas{display:block;max-width:100%}
 .canvasRow{display:flex;gap:12px;align-items:center;flex-wrap:nowrap;min-width:min-content}
@@ -171,6 +207,7 @@ footer a{color:var(--s1)}
   <p class="sub">這一頁跑的是一個<strong>真的</strong>語言模型——一個在瀏覽器裡即時推論的迷你 Transformer。你輸入的每個字，都會實際走過
     分詞 → 詞向量 → 注意力 → 前饋網路 → 取樣 → 輸出，畫面上的每個顏色格子、每條長條，都是它<strong>當下算出來的真實數值</strong>，不是示意動畫。</p>
   <div class="specs" id="specs"></div>
+  <p class="docsLink">📖 完整說明都在這一頁最下面：<a href="#doc-user">使用者手冊</a> · <a href="#doc-tech">技術手冊</a></p>
 </header>
 
 <section class="panel">
@@ -336,6 +373,23 @@ footer a{color:var(--s1)}
   <div class="viz"><div class="outBox" id="outBox"><span class="p" id="outPrompt"></span><span class="g" id="outGen"></span><span class="caret"></span></div></div>
   <div class="loopNote" id="loopNote"><span class="arrow">↻</span><span>把新的字加回輸入 → 回到 Step 1，產生下一個字</span></div>
   <div class="readout" id="r6">等待開始…</div>
+</section>
+
+<!-- 附錄：手冊 ─────────────────────────────── -->
+<section class="stage docs" id="docs">
+  <h2><span class="tag">附錄</span>手冊</h2>
+  <p class="lead">兩份完整的手冊就放在這一頁裡，離線也讀得到。內容由 <code>llm/docs/*.md</code> 在建置時轉進來，
+    跟 repo 裡那兩份是同一份東西，不會各自漂移。</p>
+
+  <details id="doc-user">
+    <summary><b>使用者手冊</b><span class="sum">怎麼操作、六個步驟各在演示什麼、常見情況</span></summary>
+    <div class="md">__DOC_USER__</div>
+  </details>
+
+  <details id="doc-tech">
+    <summary><b>技術手冊</b><span class="sum">權重格式、推論實作、動畫執行器、怎麼改這一頁</span></summary>
+    <div class="md">__DOC_TECH__</div>
+  </details>
 </section>
 
 <footer>
@@ -1038,6 +1092,20 @@ $('stopEosBtn').onclick = function () { stopAtEos = !stopAtEos; this.setAttribut
 $('detailBtn').onclick = function () { detail = !detail; this.setAttribute('aria-pressed', String(detail)); this.textContent = detail ? '🐢 每個字都完整演示' : '🐇 只完整演示第一個字'; syncLenHint(); };
 $('autoscrollBtn').onclick = function () { autoscroll = !autoscroll; this.setAttribute('aria-pressed', String(autoscroll)); };
 stepEls.forEach((e) => { e.onclick = () => { const n = +e.dataset.go; stageEls[n].scrollIntoView({ block: 'start' }); }; });
+// 手冊預設收起來，所以指到手冊的連結（含直接開 #doc-tech 的網址）要先把它展開再捲過去
+function openDoc(id) {
+  const d = document.getElementById(id);
+  if (!d || d.tagName !== 'DETAILS') return false;
+  d.open = true;
+  requestAnimationFrame(() => d.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  return true;
+}
+document.querySelectorAll('a[href^="#doc-"]').forEach((a) => {
+  a.addEventListener('click', (e) => { if (openDoc(a.getAttribute('href').slice(1))) e.preventDefault(); });
+});
+if (/^#doc-/.test(location.hash)) openDoc(location.hash.slice(1));
+window.addEventListener('hashchange', () => { if (/^#doc-/.test(location.hash)) openDoc(location.hash.slice(1)); });
+
 window.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
   if (e.code === 'Space') { e.preventDefault(); if (running) $('pauseBtn').click(); else start(); }

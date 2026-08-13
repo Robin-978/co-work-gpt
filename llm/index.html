@@ -149,6 +149,42 @@ input[type=range]{width:100%;accent-color:var(--s1)}
 .loopNote.pulse{border-color:var(--s4);color:#ffd9a3;background:rgba(201,133,0,.10)}
 .loopNote .arrow{font-size:18px}
 
+/* ---------- 附錄：手冊 ---------- */
+.docs details{border:1px solid var(--line);border-radius:var(--radius);background:var(--surface-1);margin-top:14px;overflow:hidden}
+.docs details[open]{background:var(--surface-1);border-color:var(--line-strong)}
+.docs summary{
+  cursor:pointer;padding:16px 18px;list-style:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;
+  font-size:15.5px;color:var(--text-primary);
+}
+.docs summary::-webkit-details-marker{display:none}
+.docs summary::before{content:'▸';color:var(--s1);font-size:13px;transform:translateY(-1px)}
+.docs details[open] summary::before{content:'▾'}
+.docs summary:hover{background:var(--surface-2)}
+.docs summary .sum{font-size:13px;color:var(--text-muted);font-weight:400}
+.docs .md{padding:2px 18px 22px;border-top:1px solid var(--line);font-size:14.5px;color:var(--text-secondary)}
+.docs .md h3{font-size:19px;color:var(--text-primary);margin:26px 0 10px;padding-top:14px;border-top:1px solid var(--line)}
+.docs .md h3:first-child{border-top:0;padding-top:0;margin-top:18px}
+.docs .md h4{font-size:16px;color:var(--text-primary);margin:22px 0 8px}
+.docs .md h5{font-size:14.5px;color:var(--s1);margin:18px 0 6px;letter-spacing:.02em}
+.docs .md p{margin:9px 0}
+.docs .md strong{color:var(--text-primary)}
+.docs .md ul,.docs .md ol{margin:9px 0;padding-left:22px}
+.docs .md li{margin:5px 0}
+.docs .md code{font-family:var(--mono);font-size:.9em;background:var(--surface-3);padding:1px 5px;border-radius:6px;color:#cfe2fb}
+.docs .md pre{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;overflow-x:auto;margin:12px 0}
+.docs .md pre code{background:none;padding:0;color:var(--text-secondary);font-size:12.5px;line-height:1.6;white-space:pre}
+.docs .md blockquote{margin:12px 0;padding:10px 14px;border-left:3px solid var(--s1);background:var(--surface-2);border-radius:0 10px 10px 0}
+.docs .md blockquote p{margin:0}
+.docs .md hr{border:0;border-top:1px solid var(--line);margin:20px 0}
+.docs .md a{color:var(--s1)}
+.docs .mdTableWrap{overflow-x:auto;margin:12px 0}
+.docs .md table{border-collapse:collapse;font-size:13.5px;min-width:min-content}
+.docs .md th,.docs .md td{border:1px solid var(--line);padding:7px 11px;text-align:left;vertical-align:top}
+.docs .md th{background:var(--surface-2);color:var(--text-primary);font-weight:600;white-space:nowrap}
+.docsLink{margin:14px 0 0;font-size:13px;color:var(--text-muted)}
+.docsLink a{color:var(--s1);text-decoration:none;border-bottom:1px solid rgba(57,135,229,.4)}
+.docsLink a:hover{border-bottom-color:var(--s1)}
+
 /* ---------- misc ---------- */
 canvas{display:block;max-width:100%}
 .canvasRow{display:flex;gap:12px;align-items:center;flex-wrap:nowrap;min-width:min-content}
@@ -171,6 +207,7 @@ footer a{color:var(--s1)}
   <p class="sub">這一頁跑的是一個<strong>真的</strong>語言模型——一個在瀏覽器裡即時推論的迷你 Transformer。你輸入的每個字，都會實際走過
     分詞 → 詞向量 → 注意力 → 前饋網路 → 取樣 → 輸出，畫面上的每個顏色格子、每條長條，都是它<strong>當下算出來的真實數值</strong>，不是示意動畫。</p>
   <div class="specs" id="specs"></div>
+  <p class="docsLink">📖 完整說明都在這一頁最下面：<a href="#doc-user">使用者手冊</a> · <a href="#doc-tech">技術手冊</a></p>
 </header>
 
 <section class="panel">
@@ -336,6 +373,268 @@ footer a{color:var(--s1)}
   <div class="viz"><div class="outBox" id="outBox"><span class="p" id="outPrompt"></span><span class="g" id="outGen"></span><span class="caret"></span></div></div>
   <div class="loopNote" id="loopNote"><span class="arrow">↻</span><span>把新的字加回輸入 → 回到 Step 1，產生下一個字</span></div>
   <div class="readout" id="r6">等待開始…</div>
+</section>
+
+<!-- 附錄：手冊 ─────────────────────────────── -->
+<section class="stage docs" id="docs">
+  <h2><span class="tag">附錄</span>手冊</h2>
+  <p class="lead">兩份完整的手冊就放在這一頁裡，離線也讀得到。內容由 <code>llm/docs/*.md</code> 在建置時轉進來，
+    跟 repo 裡那兩份是同一份東西，不會各自漂移。</p>
+
+  <details id="doc-user">
+    <summary><b>使用者手冊</b><span class="sum">怎麼操作、六個步驟各在演示什麼、常見情況</span></summary>
+    <div class="md"><h3>使用者手冊 — 「看得見的 LLM」動態演示頁</h3>
+<p>對象：要用這一頁講解／自學語言模型運作的人。 對應檔案：<code>llm/index.html</code>（單一檔案，約 280 KB，含這兩份手冊）。 模型規格：字典 755 字元、參數 134,976、2 layers × 4 heads、d=64、FFN 192、上下文 48 tokens。</p>
+<hr>
+<h4>1. 這一頁是什麼</h4>
+<p>一個<strong>單檔、零後端、離線可跑</strong>的網頁，用動畫一步一步演示語言模型從輸入到輸出的完整過程：</p>
+<pre><code>分詞 → 詞向量 → 注意力 → 前饋網路 → 取樣 → 輸出 → 回到分詞</code></pre>
+<p><strong>畫面上的數字都是真的。</strong> 頁面內嵌一個從零訓練的 char-level GPT，權重直接寫在 HTML 裡，推論在你的瀏覽器即時進行。不是預錄動畫，也不呼叫任何 API — 拔掉網路線一樣跑。</p>
+<p><strong>它不是什麼：</strong> 不是聊天機器人。這個模型只有 13 萬參數、只讀過 437 句 III/V 磊晶與 SPC 的中文短句，它會做的事就是「把很像訓練語料的句子接下去」。問它今天天氣，它會用磊晶的語氣胡說八道 — 那正是要給人看的東西。</p>
+<hr>
+<h4>2. 怎麼打開</h4>
+<p>直接用瀏覽器開啟 <code>index.html</code> 就好，不需要架站、不需要安裝任何東西。</p>
+<ul><li>雙擊檔案，或拖進瀏覽器視窗。</li><li>放在網路磁碟、隨身碟、公司內網都可以；整份內容都在這一個檔案裡。</li><li>需要支援 <code>canvas</code> 與 ES2017 的瀏覽器（Chrome / Edge / Firefox / Safari 近幾年的版本都可以）。</li><li>手機可以看，版面會自己收窄（測試過 390px 寬）；但熱圖較小，投影講解建議用桌機。</li></ul>
+<p>若系統設定了「減少動態效果」（prefers-reduced-motion），CSS 轉場會被關掉，畫面改為直接跳到結果 — 內容一樣完整。</p>
+<p><strong>手冊就在頁面裡。</strong> 這兩份文件收在頁面最下面的「附錄：手冊」，離線也讀得到；標題底下有直達連結。所以把 <code>index.html</code> 一個檔案交給別人就夠了，不必再附說明。</p>
+<hr>
+<h4>3. 畫面導覽</h4>
+<p>由上而下六個區塊：</p>
+<div class="mdTableWrap"><table><thead><tr><th>區塊</th><th>內容</th></tr></thead><tbody><tr><td><strong>標題與規格列</strong></td><td>參數量、層數、注意力頭、向量維度、字典、上下文 — 全部從權重檔讀出來，不是寫死的文案</td></tr><tr><td><strong>控制面板</strong></td><td>輸入框、開始／暫停／停止、六個範例、四個滑桿、三個開關</td></tr><tr><td><strong>步驟列（置頂）</strong></td><td>六個步驟的進度指示，捲動時固定在上方；右側有產生進度與迷你暫停／停止鍵</td></tr><tr><td><strong>Step 1～6</strong></td><td>六個演示區塊，正在跑的那一塊會亮起來</td></tr><tr><td><strong>附錄：手冊</strong></td><td>這兩份手冊的完整內容，收在兩個可展開的區塊裡</td></tr><tr><td><strong>頁尾</strong></td><td>這個模型的規模、語料大小與能力邊界說明</td></tr></tbody></table></div>
+<p>步驟列的六個按鈕可以點 — 點下去會捲到對應區塊，適合講解時回頭複習某一步。</p>
+<hr>
+<h4>4. 五分鐘上手</h4>
+<ol><li>開啟頁面。首屏已經先靜態畫好一組預覽（用「MOCVD 的成長溫度」跑的），可以先讓聽眾看一眼六個步驟長什麼樣。</li><li>按 <strong>▶ 開始演示</strong>（或按空白鍵）。</li><li>畫面會自動捲到 Step 1，然後一路往下走到 Step 6，再回到 Step 1 產生下一個字。</li><li>想停下來講解就按 <strong>⏸ 暫停</strong>（空白鍵）；要重來按 <strong>⏹ 停止</strong>（Esc）。</li><li>講完一輪後，把<strong>溫度</strong>拉高到 1.8 再跑一次，讓聽眾看同一個提示怎麼變得語無倫次 — 這是最有效的對照。</li></ol>
+<hr>
+<h4>5. 控制項</h4>
+<h5>輸入提示（Prompt）</h5>
+<p>最多 40 個字。模型只認得訓練語料出現過的 755 個字元；打了字典外的字會出現橘色警告，那些字<strong>會被略過</strong>（不是報錯，是直接跳過）。若一個認得的字都沒有，會拒絕開始並提示你換一句。</p>
+<h5>三個按鈕</h5>
+<div class="mdTableWrap"><table><thead><tr><th>按鈕</th><th>作用</th><th>快捷鍵</th></tr></thead><tbody><tr><td>▶ 開始演示</td><td>從頭跑一輪</td><td>空白鍵</td></tr><tr><td>⏸ 暫停 / ▶ 繼續</td><td>凍住動畫，畫面停在當下</td><td>空白鍵</td></tr><tr><td>⏹ 停止</td><td>中止並解鎖按鈕，六個區塊維持在最後狀態</td><td>Esc</td></tr></tbody></table></div>
+<p>快捷鍵在游標停在輸入框裡時不作用（否則沒辦法打空白）。步驟列右邊還有一組迷你 ⏸ / ⏹，捲到頁面下方時不用回頭找。</p>
+<h5>六個範例</h5>
+<div class="mdTableWrap"><table><thead><tr><th>範例</th><th>想演示什麼</th></tr></thead><tbody><tr><td><code>MOCVD 的成長</code></td><td>多峰分布 — 溫度／壓力／速率三個候選都是語料裡真的接續</td></tr><tr><td><code>Cpk 大於</code></td><td>模型記得的數字，也是「幻覺」的縮影（正解機率極高，偶爾仍抽到冷門）</td></tr><tr><td><code>PL 的波長</code></td><td>領域術語的接續</td></tr><tr><td><code>連續七點</code></td><td>SPC 判異規則的句型</td></tr><tr><td><code>量子井的</code></td><td>幾乎沒有懸念的一格（熵 ≈ 0.03 bits）</td></tr><tr><td><code>今天天氣</code></td><td>領域外輸入 — 模型會用磊晶語氣硬接，很適合講「訓練資料決定了它會什麼」</td></tr></tbody></table></div>
+<p>點範例會直接填入並開始（若正在跑則只填入）。</p>
+<h5>四個滑桿</h5>
+<div class="mdTableWrap"><table><thead><tr><th>滑桿</th><th>範圍</th><th>預設</th><th>說明</th></tr></thead><tbody><tr><td><strong>產生長度上限</strong></td><td>1 – 200</td><td>36</td><td><strong>上限，不是目標值。</strong> 模型講完一句話就會提早停（見下方「什麼時候停」）。提示長度 ＋ 上限超過 48 時，滑桿下方會提示「最前面的字會被擠出視窗」</td></tr><tr><td><strong>溫度 Temperature</strong></td><td>0.20 – 2.50</td><td>0.90</td><td>越低越保守（機率集中在第一名），越高越發散</td></tr><tr><td><strong>Top-K 候選</strong></td><td>1 – 20</td><td>8</td><td>每一步只從分數最高的 K 個字裡抽。K=1 等於永遠選第一名，結果完全固定</td></tr><tr><td><strong>動畫速度</strong></td><td>0.5× – 4.0×</td><td>1.0×</td><td>只影響動畫節奏，不影響計算結果</td></tr></tbody></table></div>
+<p>溫度與 Top-K 是<strong>取樣</strong>參數，改了會改變產生的字；動畫速度只改播放快慢。首屏預覽也讀同一個溫度滑桿，所以改了預設值不會跟實際演示對不起來。</p>
+<h5>三個開關</h5>
+<ul><li><strong>✂ 一句話講完就停</strong>（預設開）：模型吐出句尾符號就結束這一輪。關掉後變成 <strong>➡ 一路產生到上限</strong> — 會一直產生到長度上限為止，通常是接著開始講下一句。詳見下一節。</li><li><strong>🐢 每個字都完整演示</strong>（預設開）：每產生一個字都完整走六個步驟。關掉後變成 <strong>🐇 只完整演示第一個字</strong> — 第一個字慢慢演示，之後的字用約三倍速帶過。產生長度超過 40 又開著完整演示時，滑桿下方會提醒你會跑很久。</li><li><strong>🧭 自動捲動到目前步驟</strong>（預設開）：畫面跟著目前步驟走。關掉後可以自己停在某一個區塊盯著看（例如一直盯 Step 3 的注意力熱圖，看它每產生一個字怎麼變）。</li></ul>
+<hr>
+<h4>6. 六個步驟各在演示什麼</h4>
+<h5>Step 1 — 分詞 Tokenization</h5>
+<p>輸入被切成一個個 token，查表換成 id。chip 會逐一飛入。</p>
+<p><strong>該看的：</strong> <code>MOCVD</code> 被切成 <strong>5 個 token</strong>，而中文一個字只佔 1 個。英文和數字天生就比中文吃 token。</p>
+<p>讀數列出最後 12 個 id 與字典大小。</p>
+<h5>Step 2 — 詞向量 Embedding</h5>
+<p>三張熱圖：詞向量 ＋ 位置向量 ＝ 輸入向量。橘色是正、藍色是負、暗灰是 0（發散色標，圖例在右下）。</p>
+<p><strong>該看的：</strong> 同一個字在不同位置，第三張圖的顏色不一樣 — 位置資訊是加進去的，不是天生就有。</p>
+<p>讀數列出最後一個字向量的前 6 維實際數值，以及詞向量表的參數量（755×64 = 48,320）。</p>
+<blockquote>熱圖最多顯示 14 個 token；序列更長時只畫最後 14 個。</blockquote>
+<h5>Step 3 — 注意力 Attention</h5>
+<p>T×T 的熱圖逐列畫出，右側長條列出相同數值。上方有 <strong>2 層 × 4 頭 = 8 個按鈕</strong>可以切換。</p>
+<p><strong>該看的：</strong></p>
+<ul><li>右上角是空白的 — 那是未來的字，被因果遮罩擋住了，模型不能偷看後文。</li><li>切不同的頭，亮的位置不一樣 — 每個頭在看不同的關係。</li><li>讀數會直接告訴你「這個字把百分之幾的注意力放在哪個字上」。</li></ul>
+<p>切換頭的按鈕在暫停或停止之後仍然有效，會用最後一次的計算結果重畫 — 適合停下來逐頭講解。</p>
+<h5>Step 4 — 前饋網路 FFN</h5>
+<p>64 維 → 192 維 GELU → 壓回 64 維，連線與激活長條分段動畫。</p>
+<p><strong>該看的：</strong> 讀數會報「有幾個神經元幾乎沒被點亮」— GELU 把它們關掉了。以及這一層的參數量（2×64×192 = 24,576），佔整個模型一大半。</p>
+<blockquote>這一格畫的是<strong>最後一層</strong>（第 2 層）最後一個 token 的實際數值。</blockquote>
+<h5>Step 5 — 產生 Generation</h5>
+<p>Top-K 機率長條 ＋ 轉盤抽籤 ＋ 亂數指針。</p>
+<p><strong>該看的：</strong></p>
+<ul><li>長條是套用溫度之後、只留 Top-K 的機率。</li><li>轉盤每一段的寬度就是該字的機率；指針落在哪一段就選哪個字。</li><li>讀數同時給出「最高分的是誰」與「實際抽到誰」— 兩者不一定一樣，這就是為什麼同一句話每次跑結果會不同。</li><li>最後那個 <strong>熵（bits）</strong> 是這一步的不確定性，對整個字典算的：</li></ul>
+<p>- <code>&lt; 0.15</code> 幾乎沒有懸念 - <code>&lt; 1</code> 有點猶豫 - <code>&lt; 2.5</code> 相當不確定 - 更高 = 完全不知道要接什麼</p>
+<p>把溫度拉高再看同一格，熵會明顯變大 — 這是溫度在做什麼最直觀的證據。</p>
+<h5>Step 6 — 輸出 Output</h5>
+<p>新的字接回輸入，箭頭閃一下，回到 Step 1。這就是自迴歸生成：<code>P(下一個字 | 前面所有字)</code>。</p>
+<p>讀數會告訴你這一輪是<strong>講完了才停</strong>，還是<strong>跑到上限被截斷</strong>。</p>
+<hr>
+<h4>7. 什麼時候停：模型自己決定</h4>
+<p>這一頁的「產生長度上限」是上限，不是目標值。訓練語料裡每一句都以「。」結尾、再用換行分隔，所以這兩個字元就是這個模型學到的「講完了」。產生迴圈看到它們就收工。</p>
+<p>上限設 120 字，六個範例實際跑出來：</p>
+<div class="mdTableWrap"><table><thead><tr><th>提示</th><th style="text-align:right">實際長度</th><th>產出</th></tr></thead><tbody><tr><td>MOCVD 的成長</td><td style="text-align:right">20 字</td><td>MOCVD 的成長溫度通常在 600 到 750 度之間。</td></tr><tr><td>Cpk 大於</td><td style="text-align:right">16 字</td><td>Cpk 大於 1.33 代表製程的能力足夠。</td></tr><tr><td>PL 的波長</td><td style="text-align:right">14 字</td><td>PL 的波長是磊晶最重要的管制項目之一。</td></tr><tr><td>連續七點</td><td style="text-align:right">14 字</td><td>連續七點持續上升或是下降代表有趨勢。</td></tr><tr><td>量子井的</td><td style="text-align:right">9 字</td><td>量子井的厚度只有幾個奈米。</td></tr><tr><td>今天天氣</td><td style="text-align:right">12 字</td><td>今天天氣很冷，記得多穿一件衣服。</td></tr></tbody></table></div>
+<p><strong>講解時值得帶到的一點：</strong> 大模型也是同一招，只是句尾符號換成字典裡一個專門的 <code>&lt;eos&gt;</code> token — 訓練時擺在每個樣本結尾，模型學會「該收尾了就吐它」。ChatGPT 回答完會停下來，不是因為有人數了字數，是模型自己判斷講完了。</p>
+<p>把 <strong>✂ 一句話講完就停</strong> 關掉，就能看到它硬撐下去會變成什麼樣子：通常是接著開始講下一句，因為訓練資料本來就是一句接一句。這個對照很直觀。</p>
+<hr>
+<h4>8. 常見情況</h4>
+<div class="mdTableWrap"><table><thead><tr><th>現象</th><th>原因與處理</th></tr></thead><tbody><tr><td>出現橘色警告「以下字不在字典裡」</td><td>這個模型的字典只有 755 個字元，只涵蓋訓練語料用過的字。那些字被略過了，其餘照跑。換一句範例即可</td></tr><tr><td>按了開始卻沒反應，只出現警告</td><td>整句話沒有任何一個字在字典裡。用上面的範例句</td></tr><tr><td>跑很久跑不完</td><td>產生長度拉太大又開著「🐢 每個字都完整演示」。切成 🐇 或把動畫速度調到 4×</td></tr><tr><td>產出比我設的長度短很多</td><td>正常，而且是預期行為。長度是<strong>上限</strong>，模型講完一句就停</td></tr><tr><td>產出停在句子中間</td><td>那是真的撞到上限被截斷了。把上限調大，或確認「✂ 一句話講完就停」是開著的</td></tr><tr><td>產生到一半開頭的字不見了</td><td>上下文只有 48 tokens，超過就會往前滑動、開頭被擠出視窗。滑桿下方會事先提醒</td></tr><tr><td>每次跑結果都不一樣</td><td>正常。Step 5 是隨機抽樣。想要固定結果就把 Top-K 設成 1</td></tr><tr><td>內容明顯是胡說</td><td>也是正常的，而且是重點之一。13 萬參數、45,780 字語料的模型只會生成「很像訓練資料」的句子</td></tr><tr><td>熱圖只顯示一部分 token</td><td>熱圖上限 14 個 token，長序列只畫最後 14 個</td></tr><tr><td>動畫不流暢</td><td>調低動畫速度，或關掉自動捲動</td></tr></tbody></table></div>
+<hr>
+<h4>9. 這個模型的邊界（講解時值得先講清楚）</h4>
+<ul><li><strong>只會這個領域。</strong> 語料是 437 句、45,780 字的 III/V 磊晶 ＋ SPC ＋ 良率可靠度 ＋ 金融財經中文短句。領域外的輸入它會硬接。</li><li><strong>會記錯數字。</strong> 例如偶爾吐出 <code>Cpk 大於 1.63</code>，而正確數字在那一格有 97.5% 的機率 — 是 0.2% 的候選贏了抽籤。這正是「幻覺」的縮影：不是不知道，是抽樣抽到了冷門。</li><li><strong>有些歧義訓練不掉。</strong> 例如「複利是利息」下一格，<code>，</code> 58.8% 對上 <code>再</code> 31.0%（正解是「再」）。char-level ＋ 48 tokens 的前綴訊息量壓不過「利息 → ，」這個先驗，多訓練也不會改善。</li><li><strong>規模差距。</strong> 這個模型 13 萬參數；真正的 LLM 是十億到兆級。演示的是<strong>機制</strong>，不是能力。</li></ul>
+<hr>
+<h4>相關文件</h4>
+<ul><li><a href="#doc-tech">技術手冊</a> — 內部實作、權重格式、如何改這一頁</li><li><code>llm/README.md</code> — 訓練、續訓、擴充字典、RAG、專家系統、生產資料工具鏈</li></ul></div>
+  </details>
+
+  <details id="doc-tech">
+    <summary><b>技術手冊</b><span class="sum">權重格式、推論實作、動畫執行器、怎麼改這一頁</span></summary>
+    <div class="md"><h3>技術手冊 — 「看得見的 LLM」動態演示頁</h3>
+<p>對象：要修改、重建、或把這一頁換成別的模型的人。 原始碼：<code>llm/tools/page.template.html</code>（模板，約 55 KB）。<strong>不要直接改 <code>llm/index.html</code></strong> — 那是建置產物，下次 <code>build.js</code> 會整個覆蓋掉。</p>
+<hr>
+<h4>1. 架構總覽</h4>
+<pre><code>tools/corpus.js  ──┐
+                   ├─→ run_train.js ─→ tools/weights.json ─┐
+tools/train.js  ───┘                                        │
+                                                            ├─→ build.js ─→ index.html
+tools/page.template.html ───────────────────────────────────┤
+docs/*.md ─────────────→ tools/md.js ───────────────────────┘</code></pre>
+<p><code>index.html</code> 是<strong>單一自足檔案</strong>：沒有外部 CSS、JS、字型、圖片，也沒有任何網路請求。權重以 JSON 內嵌在 <code>&lt;script type=&quot;application/json&quot; id=&quot;wdata&quot;&gt;</code> 裡，頁面載入時解析並反量化，之後所有推論都在瀏覽器裡跑。</p>
+<p>模板內有四個佔位符，由 <code>build.js</code> 置換：</p>
+<div class="mdTableWrap"><table><thead><tr><th>佔位符</th><th>內容</th></tr></thead><tbody><tr><td><code>__WEIGHTS__</code></td><td><code>weights.json</code> 全文</td></tr><tr><td><code>__CORPUS_CHARS__</code></td><td><code>buildCorpus().length</code> 的千分位字串</td></tr><tr><td><code>__DOC_USER__</code></td><td><code>docs/user-manual.md</code> 轉成的 HTML</td></tr><tr><td><code>__DOC_TECH__</code></td><td><code>docs/technical-manual.md</code> 轉成的 HTML</td></tr></tbody></table></div>
+<p><strong>兩份手冊的唯一真相是 <code>docs/*.md</code>。</strong> 頁面最下面的「附錄：手冊」是建置時從那兩個檔案轉進來的，不是手抄的副本 — 改手冊只改 <code>.md</code>，重跑 <code>build.js</code> 就同步了。</p>
+<p>整份 JS 包在一個 IIFE 裡（<code>'use strict'</code>），不污染全域。</p>
+<hr>
+<h4>2. 模型規格</h4>
+<p>從 <code>weights.json</code> 的 <code>cfg</code> 讀出：</p>
+<div class="mdTableWrap"><table><thead><tr><th>欄位</th><th>值</th><th>意義</th></tr></thead><tbody><tr><td><code>V</code></td><td>755</td><td>字典大小（字元數）</td></tr><tr><td><code>C</code></td><td>64</td><td>向量維度</td></tr><tr><td><code>L</code></td><td>2</td><td>層數</td></tr><tr><td><code>H</code></td><td>4</td><td>每層的注意力頭數</td></tr><tr><td><code>F</code></td><td>192</td><td>FFN 隱藏層維度</td></tr><tr><td><code>B</code></td><td>48</td><td>上下文長度（tokens）</td></tr></tbody></table></div>
+<p><code>HD = C / H = 16</code>（每個頭的維度）。</p>
+<p><strong>參數量公式：</strong></p>
+<pre><code>V·C  +  B·C  +  L·(4C² + 2C·F + 9C + F)  +  2C</code></pre>
+<p>代入：<code>48,320 + 3,072 + 2×41,728 + 128 = 134,976</code>。</p>
+<p>各項對應：詞向量表 <code>V·C</code>、位置向量表 <code>B·C</code>、每層的 QKV＋輸出投影 <code>4C²</code>、FFN 兩個矩陣 <code>2C·F</code>、兩組 LayerNorm 的 γ/β 與三組 bias <code>9C + F</code>、最後的 LayerNorm <code>2C</code>。</p>
+<p><strong>注意 <code>H</code> 不在公式裡</strong> — 改頭數不會改變參數量，只是把同樣的 <code>C</code> 維切成不同份數。這一點在頁面上有八個切換按鈕（<code>L × H</code>），講解時值得指出來。</p>
+<p>輸出頭是 <strong>weight-tied</strong> 的：logits 直接用 <code>wte</code> 算，沒有獨立的輸出矩陣。</p>
+<hr>
+<h4>3. 權重檔格式</h4>
+<p><code>weights.json</code> 結構：</p>
+<pre><code>{
+  &quot;cfg&quot;:   { &quot;V&quot;:755, &quot;C&quot;:64, &quot;L&quot;:2, &quot;H&quot;:4, &quot;F&quot;:192, &quot;B&quot;:48 },
+  &quot;vocab&quot;: [&quot;\n&quot;, &quot; &quot;, &quot;!&quot;, …],          // 長度 V，index 即 token id
+  &quot;tensors&quot;: {
+    &quot;wte&quot;:  { &quot;s&quot;: 0.0123, &quot;d&quot;: &quot;&lt;base64&gt;&quot; },   // s = scale，d = int8 資料
+    &quot;wpe&quot;:  { … },
+    &quot;layers.0.ln1g&quot;: { … }, &quot;layers.0.ln1b&quot;: { … },
+    &quot;layers.0.wqkv&quot;: { … }, &quot;layers.0.bqkv&quot;: { … },
+    &quot;layers.0.wo&quot;:   { … }, &quot;layers.0.bo&quot;:   { … },
+    &quot;layers.0.ln2g&quot;: { … }, &quot;layers.0.ln2b&quot;: { … },
+    &quot;layers.0.w1&quot;:   { … }, &quot;layers.0.b1&quot;:   { … },
+    &quot;layers.0.w2&quot;:   { … }, &quot;layers.0.b2&quot;:   { … },
+    &quot;layers.1.…&quot;:    { … },
+    &quot;lnfg&quot;: { … }, &quot;lnfb&quot;: { … }
+  }
+}</code></pre>
+<p>共 28 個張量（2 + 12×2 + 2）。</p>
+<p><strong>量化：int8 對稱量化。</strong> 每個張量存一個 scale <code>s</code> 與一串 int8。反量化就是 <code>value = int8 × s</code>：</p>
+<pre><code>function deq(t) {
+  const bin = atob(t.d), n = bin.length, out = new Float32Array(n);
+  for (let i = 0; i &lt; n; i++) {
+    let b = bin.charCodeAt(i);
+    if (b &gt; 127) b -= 256;        // base64 解出來是 0..255，要還原成有號
+    out[i] = b * t.s;
+  }
+  return out;
+}</code></pre>
+<p>因為一個參數剛好一個位元組，<strong>參數量就等於所有 base64 解碼後的總長度</strong> — 頁面上的「參數量」規格就是這樣算出來的，不是寫死的數字：</p>
+<pre><code>const N_PARAMS = Object.keys(RAW.tensors)
+  .reduce((a, k) =&gt; a + atob(RAW.tensors[k].d).length, 0);</code></pre>
+<hr>
+<h4>4. 推論實作</h4>
+<p><code>forward(tokens)</code> 是純 JS 的前向傳播，<strong>與 <code>train.js</code> 的實作等價</strong>，差別只在它把所有中間值留在 <code>cache</code> 裡供繪圖使用。</p>
+<p>架構是 <strong>pre-LN Transformer decoder</strong>：</p>
+<pre><code>emb = wte[token] + wpe[position]
+for each layer:
+    ln1  = LayerNorm(x)
+    qkv  = ln1 @ Wqkv + bqkv                       # 一次算出 Q/K/V
+    for each head:
+        scores = (Q·K) / √HD,  只算 s ≤ t          # 因果遮罩：直接不算未來
+        att    = softmax(scores)                   # 減去最大值再取 exp
+        out    = Σ att·V
+    res1 = x + (attout @ Wo) + bo                  # 殘差
+    ln2  = LayerNorm(res1)
+    fc   = ln2 @ W1 + b1
+    act  = GELU(fc)
+    res2 = res1 + (act @ W2) + b2                  # 殘差
+    x    = res2
+lnf    = LayerNorm(x)
+logits = lnf[最後一個 token] · wteᵀ                # weight-tied</code></pre>
+<p>實作細節：</p>
+<ul><li><strong>LayerNorm</strong> 用 <code>eps = 1e-5</code>，逐 token 算均值與變異數。</li><li><strong>GELU</strong> 用 tanh 近似：<code>0.5x(1 + tanh(√(2/π)(x + 0.044715x³)))</code>。</li><li><strong>因果遮罩不是乘 0</strong>，而是內層迴圈只跑到 <code>s &lt;= t</code> — 未來的位置根本沒被計算，所以熱圖右上角是真的空白。</li><li><strong>softmax 先減最大值</strong>再取 exp，避免溢位。</li><li><strong>logits 只算最後一個 token</strong>（生成只需要這一格），這是主要的省時處。</li><li><code>matmul</code> 是樸素三層迴圈，但跳過 <code>a === 0</code> 的項。序列最長 48、<code>C=64</code>，這個規模不需要分塊或 SIMD。</li></ul>
+<p><code>cache</code> 保留的東西（繪圖層直接讀）：</p>
+<div class="mdTableWrap"><table><thead><tr><th>欄位</th><th>內容</th></tr></thead><tbody><tr><td><code>tokv</code> / <code>posv</code> / <code>emb</code></td><td>Step 2 的三張熱圖</td></tr><tr><td><code>blocks[l].scores</code> / <code>.att</code></td><td>Step 3 的注意力（softmax 前 / 後）</td></tr><tr><td><code>blocks[l].ln2</code> / <code>.fc</code> / <code>.act</code> / <code>.fo</code></td><td>Step 4 的 FFN 輸入、線性輸出、激活、輸出</td></tr><tr><td><code>logits</code></td><td>Step 5 的候選分數</td></tr></tbody></table></div>
+<p>Step 4 固定畫<strong>最後一層</strong>（<code>L = CFG.L - 1</code>）最後一個 token。</p>
+<hr>
+<h4>5. 取樣</h4>
+<pre><code>function softmaxTopK(logits, temperature, K) {
+  const idx = [...].sort((a, b) =&gt; logits[b] - logits[a]);   // 對全字典排序
+  const keep = idx.slice(0, K);
+  // 只對留下的 K 個做 softmax(logit / temperature)
+}</code></pre>
+<p>兩點值得知道：</p>
+<ol><li><strong>Top-K 是對原始 logits 選的</strong>，不是對溫度縮放後選的 — 正溫度不改變排序，所以兩者等價，但實作上先選再縮放比較省。</li><li><strong>回傳的機率是「在 K 個候選之內」的機率</strong>，加總為 1。所以 Top-K 從 8 改成 3，同一個字的百分比會變大 — 那是重新歸一化，不是模型變有把握了。</li></ol>
+<p><strong>熵</strong>另外算，而且是對<strong>整個字典</strong>算的（不是只算 Top-K），單位 bits：</p>
+<pre><code>H = -Σ p·log₂(p)     // p = softmax(logits / temperature) over all V</code></pre>
+<p>這是頁面上唯一能反映「模型對整體有多猶豫」的數字；只看 Top-K 的長條會嚴重低估不確定性。</p>
+<h5>停止條件</h5>
+<pre><code>const STOP_CHARS = new Set(['。', '\n']);</code></pre>
+<p>語料是 437 句、每句以「。」結尾、用 <code>\n</code> 串起來（<code>corpus.js</code> 的 <code>buildCorpus()</code>），所以這兩個字元就是這個模型學到的句尾。產生迴圈在 <code>tokens.push(next)</code> 之後檢查，命中就 <code>break</code>：</p>
+<pre><code>if (stopAtEos &amp;&amp; STOP_CHARS.has(VOCAB[next])) { hitEos = true; break; }</code></pre>
+<p>因此 <code>len</code> 滑桿是<strong>上限</strong>而不是目標值。實測六個範例的產出落在 9–20 字，上限設 120 也一樣。</p>
+<p><strong>為什麼不需要另外加一個 <code>&lt;eos&gt;</code> token：</strong> 大模型會在字典裡放一個專門的結束符號，訓練時擺在每個樣本結尾。這裡「。」本來就在字典裡、而且在語料裡永遠出現在句子結尾，這個位置的統計已經足夠 — 加一個新符號只是多一個 embedding 要學。若日後語料改成句尾不一定是「。」（例如加入問句、條列），就得回頭改 <code>STOP_CHARS</code>，或真的加一個結束符號並重訓。</p>
+<p><code>stopAtEos</code> 由 <code>#stopEosBtn</code> 切換，關掉之後會一路跑到上限 — 保留這個開關是為了能演示「不停下來會變成什麼樣」。</p>
+<p><strong>抽樣</strong>是累積機率法：<code>r = Math.random()</code>，沿著 <code>probs</code> 累加，第一個超過 <code>r</code> 的就是選中的字。轉盤上指針的位置直接就是 <code>r</code>，所以畫面顯示的是真的抽籤過程，不是事後補畫。</p>
+<hr>
+<h4>6. 動畫執行器</h4>
+<p>三個機制撐起整個播放控制：</p>
+<p><strong>取消用 <code>runId</code>。</strong> 全域一個遞增的 <code>runId</code>，每次 <code>start()</code> / <code>stop()</code> 都 <code>runId++</code>。所有 <code>await wait(...)</code> 每一幀檢查 <code>runId</code> 有沒有變，變了就 <code>throw CANCEL</code>，整個 async 呼叫鏈自然拆掉。<code>start()</code> 的 <code>catch</code> 吞掉 <code>CANCEL</code>、其他錯誤照拋。</p>
+<pre><code>async function wait(ms) {
+  const my = runId;
+  let remain = ms, last = performance.now();
+  while (remain &gt; 0) {
+    await raf();
+    if (runId !== my) throw CANCEL;
+    const now = performance.now(), dt = Math.min(80, now - last); last = now;
+    if (!paused) remain -= dt * speed;      // 暫停 = 不扣時間
+  }
+}</code></pre>
+<p><strong>暫停靠不扣時間</strong>，不是 <code>clearTimeout</code> — 所以暫停期間畫面完全凍住，繼續之後接得回去。<code>dt</code> 上限 80ms 是為了分頁切回來時不要一次跳完。</p>
+<p><strong>速度是乘在時間上的。</strong> 滑桿 5–40 → <code>speed = 0.5 – 4.0</code>，<code>remain -= dt * speed</code>。</p>
+<p><strong>詳細模式是一個係數。</strong> <code>runOnce(tokens, nPrompt, isFirst)</code> 開頭算出 <code>d</code>：</p>
+<pre><code>const d = isFirst || detail ? 1 : 0.34;</code></pre>
+<p>之後所有 <code>await wait(x * d)</code>。第一個字永遠完整演示；關掉 <code>detail</code> 之後其餘的字約三倍速帶過。逐格揭露的動畫（Step 1 的 chip、Step 2 的逐行、Step 3 的逐列）則是用 <code>isFirst</code> 完全跳過。</p>
+<hr>
+<h4>7. 繪圖層</h4>
+<p>全部是 <code>canvas</code> 2D，沒有任何繪圖函式庫。</p>
+<p><strong>色標分兩種，依用途分工：</strong></p>
+<div class="mdTableWrap"><table><thead><tr><th>用途</th><th>色標</th><th>函式</th></tr></thead><tbody><tr><td>有正負的向量（Step 2、Step 4 的輸入輸出）</td><td>發散：藍 ← 暗灰 → 橘</td><td><code>diverging(v, max)</code></td></tr><tr><td>只有非負的量（Step 3 注意力、Step 4 激活）</td><td>單色階：暗 → 亮</td><td><code>seqBlue</code> / 綠色階</td></tr></tbody></table></div>
+<p>熱圖旁邊一律附上等價的數字長條，不能只靠顏色判讀（色覺無障礙）。</p>
+<p><strong>顯示視窗：</strong> <code>const DISP = 14;</code> — 熱圖與向量圖最多畫 14 個 token，序列更長時 <code>attWindow(T)</code> 回傳 <code>{off, n}</code> 只取最後 14 個。改這個常數會直接改變三張熱圖的密度。</p>
+<p><strong>縮放：</strong> 所有 canvas 都是 <code>max-width:100%</code>；<code>resize</code> 事件只重畫 Step 4（其他幾張在下一輪 <code>runOnce</code> 會自然重畫）。</p>
+<hr>
+<h4>8. UI 狀態</h4>
+<p>沒有框架，就是幾個模組層級變數：</p>
+<pre><code>let runId = 0, paused = false, speed = 1, detail = true, autoscroll = true, stopAtEos = true;
+let running = false;</code></pre>
+<ul><li><code>setStage(n)</code> 切換六個 <code>&lt;section&gt;</code> 的 <code>on</code> / <code>visited</code> class 與步驟列的 <code>active</code> / <code>done</code>，並在 <code>autoscroll</code> 開啟時捲到該區塊（偏移 76px 讓開置頂步驟列）。</li><li><code>syncCtrl()</code> 把主要按鈕的狀態同步到步驟列的迷你按鈕。</li><li><code>syncLenHint()</code> 在產生長度、提示、或 <code>stopAtEos</code> / <code>detail</code> 改變時重算提示文字：<code>stopAtEos</code> 開著就說明這是上限、超過 <code>CFG.B</code> 就警告視窗會滑動、<code>detail &amp;&amp; n &gt; 40</code> 就警告會跑很久。</li><li>鍵盤：<code>Space</code> = 開始／暫停、<code>Escape</code> = 停止；<code>e.target.tagName === 'INPUT'</code> 時直接 return（否則輸入框打不了空白）。</li></ul>
+<p><strong>所有維度文案都從 <code>cfg</code> 填入</strong>，不是寫死的：規格列（<code>specs</code>）、<code>.dimC</code> / <code>.dimF</code> 這些 span、頁尾的參數量與語料字數。換一個不同規模的模型重新 build，頁面不會說錯自己的規格。</p>
+<p>首屏會先靜態畫一次預覽（用 <code>MOCVD 的成長溫度</code>），Step 5 的預覽也讀控制列上的溫度滑桿 — 改預設溫度不會讓首屏跟實際演示對不起來。</p>
+<hr>
+<h4>9. 建置</h4>
+<pre><code>cd llm/tools
+node build.js ../index.html</code></pre>
+<p><code>build.js</code> 做的事：</p>
+<ol><li>讀 <code>weights.json</code> 與 <code>page.template.html</code>，用 <code>corpus.js</code> 算語料字數，用 <code>md.js</code> 把兩份手冊轉成 HTML。</li><li><strong>先檢查</strong>要內嵌的東西裡沒有 <code>&lt;/script&gt;</code>（權重與手冊都檢查；有的話會提早關掉 <code>&lt;script&gt;</code> 標籤，整頁壞掉）。</li><li><strong>先在模板上確認</strong>每個佔位符剛好出現一次，然後才置換（用函式形式的 <code>replace</code>，避免 <code>$&amp;</code> 之類的替換樣式被誤解讀）。</li><li>寫檔，印出大小。</li></ol>
+<blockquote>第 3 步刻意是「置換前數一次」而不是「置換後檢查殘留」。技術手冊本文就在講 <code>__WEIGHTS__</code> 這些佔位符，那些字串會合法地出現在產出裡 — 用殘留檢查會誤判成置換失敗。這個坑是真的踩過才改的。</blockquote>
+<h5><code>md.js</code>：極小的 Markdown 轉換器</h5>
+<p>只支援 <code>docs/*.md</code> 實際用到的語法：標題、段落、清單、引用、水平線、表格（含 <code>---:</code> 靠右）、程式碼區塊與行內程式碼、粗體、連結。刻意不做巢狀清單與圖片。</p>
+<p>三個實作上的重點：</p>
+<ul><li><strong>行內程式碼先抽走</strong>再做其他規則，否則 <code>`&lt;eos&gt;`</code>、<code>`&lt;/script&gt;`</code> 這種內容會被當成 HTML。佔位符用 <code>\u0000</code> 包住 — 一開始用「空白＋數字＋空白」，結果把正文裡的數字吃掉了。</li><li><strong>連結重寫</strong>：手冊互相引用（<code>user-manual.md</code> ↔ <code>technical-manual.md</code>）在頁內變成 <code>#doc-user</code> / <code>#doc-tech</code> 錨點；指向 repo 檔案的（<code>../README.md</code>）降成純文字，因為單檔網頁連不到。對照表在 <code>build.js</code> 的 <code>LINKS</code>。</li><li><strong><code>assertNoMarkdown()</code></strong> 在轉完之後掃一遍產出，還看得到 <code>**</code>、<code>|</code> 開頭的行、<code>#</code> 標題、<code>[](…)</code> 就丟錯。加了沒支援的語法會讓 build 失敗，而不是默默出一頁壞掉的手冊。</li></ul>
+<p>表格一律包一層 <code>.mdTableWrap</code>（<code>overflow-x:auto</code>），否則手冊裡的寬表格在手機寬度會撐爆版面。</p>
+<p>改完模板一定要重跑這個指令，否則 <code>index.html</code> 還是舊的。驗證有沒有生效最快的方法：看規格列的數字，或用瀏覽器搜尋你剛加的文案。</p>
+<hr>
+<h4>10. 常見修改</h4>
+<div class="mdTableWrap"><table><thead><tr><th>想做什麼</th><th>怎麼做</th></tr></thead><tbody><tr><td>改文案、改版面、加說明段落</td><td>改 <code>page.template.html</code>，重跑 <code>build.js</code></td></tr><tr><td>換一個不同規模的模型</td><td>重新訓練產生新的 <code>weights.json</code>，重跑 <code>build.js</code>。頁面會自動反映新的 <code>cfg</code>，不用改 HTML</td></tr><tr><td>改預設溫度／長度／Top-K</td><td>改 <code>&lt;input&gt;</code> 的 <code>value</code> 與旁邊 <code>&lt;b&gt;</code> 的顯示值（兩處都要改，否則首屏顯示會對不上）</td></tr><tr><td>換語料，句尾不再是「。」</td><td>改 <code>STOP_CHARS</code>；若新語料的句尾沒有固定符號，就得在字典裡加一個結束符號並重訓</td></tr><tr><td>改熱圖顯示的 token 數</td><td>改 <code>DISP</code></td></tr><tr><td>改 Step 4 顯示哪一層</td><td><code>runOnce</code> 裡的 <code>const L = CFG.L - 1</code>（<code>resize</code> handler 裡也有一份，要一起改）</td></tr><tr><td>加第七個步驟</td><td>新增 <code>&lt;section id=&quot;s7&quot;&gt;</code>、加進 <code>stageEls</code> / 步驟列、在 <code>runOnce</code> 裡插 <code>setStage(7)</code>。<code>setStage</code> 裡的 <code>1..6</code> 迴圈上限也要改</td></tr><tr><td>換配色</td><td>CSS 的 <code>:root</code> 變數，以及 JS 裡的 <code>C_NEG</code> / <code>C_POS</code> / <code>C_MID</code> / <code>C_S*</code> / <code>C_G*</code> 常數</td></tr><tr><td>改手冊內容</td><td>只改 <code>docs/*.md</code>，重跑 <code>build.js</code>。<strong>不要改頁面裡那份</strong> — 下次建置會被覆蓋</td></tr><tr><td>手冊要用新的 Markdown 語法</td><td>在 <code>md.js</code> 的 <code>render()</code> 加規則；沒加就會被 <code>assertNoMarkdown()</code> 擋下來</td></tr></tbody></table></div>
+<hr>
+<h4>11. 效能與限制</h4>
+<ul><li><strong>推論成本</strong>：每個字一次 forward。<code>T ≤ 48</code>、<code>C = 64</code>、<code>L = 2</code>，在一般筆電上單次 forward 遠低於一幀的時間；<strong>畫面速度完全由動畫節奏決定，不是被計算拖慢的</strong>。</li><li><strong>檔案大小</strong> 約 280 KB：權重 JSON 約 182 KB、兩份手冊約 24 KB、其餘是模板本身。int8 量化把浮點權重壓成四分之一；再往下壓（int4）會開始看得出生成品質變差。</li><li><strong>記憶體</strong>：<code>forward</code> 每次都配新的 <code>Float32Array</code>，沒有做緩衝池。以這個規模沒有必要，但如果把 <code>B</code> 或 <code>C</code> 放大一個數量級就得處理。</li><li><strong>沒有 KV cache</strong>：每產生一個字都重算整個序列。對演示反而是對的 — 要能畫出完整的注意力矩陣。真正的推論引擎不會這樣做。</li><li><strong>量化誤差</strong>：頁面顯示的數值是反量化之後的，與訓練時的浮點值有微小差異。不影響演示，但別拿頁面上的數字去驗證訓練程式。</li></ul>
+<hr>
+<h4>12. 改完之後該驗什麼</h4>
+<p>Playwright 實跑過的項目，改動之後值得重跑一遍：</p>
+<ul><li>桌機與 390px 手機寬度都沒有 console error、沒有水平溢出。</li><li>產生流程能完整跑完；暫停真的凍住輸出；停止之後按鈕狀態正確復原。</li><li>注意力頭切換會同步重畫（包含停止之後）。</li><li>字典外的輸入會出現警告；全部都在字典外會拒絕開始。</li><li>空白與換行字元在 Step 1 的 chip 與 Step 6 的輸出框裡都渲染正確。</li><li>四個滑桿的上下限與提示條件（上限說明、超過上下文、詳細模式 &gt; 40 字）。</li><li><strong>提早停止</strong>：開著 <code>stopAtEos</code> 時產出停在句尾符號且短於上限；關掉時剛好跑滿上限、句號不會中止。</li><li><strong>內嵌手冊</strong>：<code>node md.js --test</code> 全過；頁面上兩份手冊預設收起、標題連結與手冊內互相引用都會展開對應區塊、用 <code>#doc-tech</code> 開頁也會展開；展開後在 390px 仍無水平溢出（寬表格由 <code>.mdTableWrap</code> 自己捲）。</li><li><strong>實跑 60 字</strong>，確認滑動視窗之下續寫仍然完整。</li></ul>
+<hr>
+<h4>相關文件</h4>
+<ul><li><a href="#doc-user">使用者手冊</a> — 怎麼操作、六個步驟在演示什麼</li><li><code>llm/README.md</code> — 訓練、續訓、擴充字典、RAG、專家系統、生產資料工具鏈</li></ul></div>
+  </details>
 </section>
 
 <footer>
@@ -1038,6 +1337,20 @@ $('stopEosBtn').onclick = function () { stopAtEos = !stopAtEos; this.setAttribut
 $('detailBtn').onclick = function () { detail = !detail; this.setAttribute('aria-pressed', String(detail)); this.textContent = detail ? '🐢 每個字都完整演示' : '🐇 只完整演示第一個字'; syncLenHint(); };
 $('autoscrollBtn').onclick = function () { autoscroll = !autoscroll; this.setAttribute('aria-pressed', String(autoscroll)); };
 stepEls.forEach((e) => { e.onclick = () => { const n = +e.dataset.go; stageEls[n].scrollIntoView({ block: 'start' }); }; });
+// 手冊預設收起來，所以指到手冊的連結（含直接開 #doc-tech 的網址）要先把它展開再捲過去
+function openDoc(id) {
+  const d = document.getElementById(id);
+  if (!d || d.tagName !== 'DETAILS') return false;
+  d.open = true;
+  requestAnimationFrame(() => d.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  return true;
+}
+document.querySelectorAll('a[href^="#doc-"]').forEach((a) => {
+  a.addEventListener('click', (e) => { if (openDoc(a.getAttribute('href').slice(1))) e.preventDefault(); });
+});
+if (/^#doc-/.test(location.hash)) openDoc(location.hash.slice(1));
+window.addEventListener('hashchange', () => { if (/^#doc-/.test(location.hash)) openDoc(location.hash.slice(1)); });
+
 window.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
   if (e.code === 'Space') { e.preventDefault(); if (running) $('pauseBtn').click(); else start(); }
