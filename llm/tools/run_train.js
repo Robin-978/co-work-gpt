@@ -1,5 +1,6 @@
 'use strict';
 const fs = require('fs');
+const path = require('path');
 const { buildCorpus } = require('./corpus.js');
 const { makeModel, forward, backward, crossEntropyAndDLogits, paramList, makeGrads } = require('./train.js');
 
@@ -26,14 +27,27 @@ if (cfg.C % cfg.H) throw new Error('DIM 必須能被 HEADS 整除');
 const RESUME = process.env.RESUME ? String(process.env.RESUME) : '';
 const ckptPath = RESUME && RESUME !== '1' ? RESUME : __dirname + '/weights.json';
 
+// 輸出路徑。預設就是 weights.json——但量速度或試超參數時一定要改掉：
+// 這支程式在 step === STEPS 也會存檔，用 STEPS=50 量個速度就足以把訓練好的檢查點洗掉。
+// （這不是假設，是真的踩過。）
+const OUT = process.env.OUT ? path.resolve(process.env.OUT) : __dirname + '/weights.json';
+
 function loadCheckpoint(model) {
   const R = JSON.parse(fs.readFileSync(ckptPath, 'utf8'));
-  for (const k of ['C', 'L', 'H', 'F', 'B']) {
+  // C/L/H/F 改了就沒辦法沿用任何一個矩陣，只能從零訓練。
+  for (const k of ['C', 'L', 'H', 'F']) {
     if (R.cfg[k] !== cfg[k]) {
       throw new Error(`續訓失敗：檢查點的 ${k}=${R.cfg[k]}，這次要的是 ${cfg[k]}。` +
-        `續訓不能改模型結構，請用 ${k === 'C' ? 'DIM' : k === 'L' ? 'LAYERS' : k === 'H' ? 'HEADS' : k === 'F' ? 'FF' : 'BLOCK'}=${R.cfg[k]}，或拿掉 RESUME 從零訓練。`);
+        `續訓不能改這些結構，請用 ${k === 'C' ? 'DIM' : k === 'L' ? 'LAYERS' : k === 'H' ? 'HEADS' : 'FF'}=${R.cfg[k]}，或拿掉 RESUME 從零訓練。`);
     }
   }
+  // B 是例外：上下文只有位置向量表的長度跟它綁在一起，其他張量都不受影響。
+  // 拉長時把舊的前 B_old 列照抄、新的位置維持隨機初始化，等於暖啟動——
+  // 比從零訓練省下大半時間。縮短則不支援：那要丟掉學過的位置，不如重訓。
+  if (R.cfg.B > cfg.B) {
+    throw new Error(`續訓失敗：檢查點的 B=${R.cfg.B} 比這次的 ${cfg.B} 長。縮短上下文請拿掉 RESUME 從零訓練。`);
+  }
+  const oldB = R.cfg.B;
   const deq = (t) => {
     const b = Buffer.from(t.d, 'base64'), o = new Float32Array(b.length);
     for (let i = 0; i < b.length; i++) { let x = b[i]; if (x > 127) x -= 256; o[i] = x * t.s; }
@@ -51,6 +65,9 @@ function loadCheckpoint(model) {
         for (let c = 0; c < cfg.C; c++) arr[i * cfg.C + c] = src[j * cfg.C + c];
         kept++;
       }
+    } else if (name === 'wpe') {
+      // 逐「位置」搬：前 oldB 個位置沿用，拉長出來的位置維持隨機初始化
+      arr.set(src.subarray(0, oldB * cfg.C), 0);
     } else {
       if (src.length !== arr.length) throw new Error(`續訓失敗：張量 ${name} 大小不符`);
       arr.set(src);
@@ -59,6 +76,10 @@ function loadCheckpoint(model) {
   const fresh = chars.length - kept;
   console.log(`續訓：載入 ${ckptPath}`);
   console.log(`  字典 ${R.vocab.length} → ${chars.length}，沿用 ${kept} 個字的詞向量，${fresh} 個新字隨機初始化`);
+  if (oldB !== cfg.B) {
+    console.log(`  上下文 ${oldB} → ${cfg.B}，沿用前 ${oldB} 個位置的位置向量，後 ${cfg.B - oldB} 個隨機初始化`);
+    console.log(`  ⚠ 新位置沒被訓練過，剛載入時長序列的 loss 會偏高，要跑一段才會補起來`);
+  }
   if (fresh > 40) console.log(`  ⚠ 新字有 ${fresh} 個，數量偏多，續訓可能不夠——考慮拿掉 RESUME 從零訓練`);
 }
 
@@ -193,7 +214,7 @@ function save() {
     tensors[name] = { s: scale, d: q.toString('base64') };
   }
   const out = { cfg, vocab: chars, tensors };
-  fs.writeFileSync(__dirname + '/weights.json', JSON.stringify(out));
-  const kb = (fs.statSync(__dirname + '/weights.json').size / 1024).toFixed(0);
-  console.log(`  saved weights.json (${kb} KB)`);
+  fs.writeFileSync(OUT, JSON.stringify(out));
+  const kb = (fs.statSync(OUT).size / 1024).toFixed(0);
+  console.log(`  saved ${path.basename(OUT)} (${kb} KB)`);
 }
