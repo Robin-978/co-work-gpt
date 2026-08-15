@@ -155,8 +155,9 @@ write('99-不要放進向量庫的東西.md', `# 不要放進向量庫的東西
 write('00-啟動 RAGFlow（Windows）.md', `# 啟動 RAGFlow（Windows）
 
 先講一件會直接卡住的事：**\`ragflow-main\` 這份原始碼的 \`docker-compose.yml\` 用了 profiles，
-所以官方 README 上那句 \`docker compose up -d\` 在這份樹上不會啟動主服務。** 要加 \`--profile cpu\`。
-下面第 4 步有驗證方法。
+所以官方 README 上那句 \`docker compose up -d\` 在這份樹上不會啟動主服務。**
+而且**要給兩個 profile**：一個是主程式（\`cpu\`），一個是文件搜尋引擎（預設 \`elasticsearch\`）。
+只給前者的話網頁會打得開，但上傳文件解析不了。完整指令在第 4 步。
 
 ## 0. 先確認機器夠
 
@@ -268,17 +269,37 @@ cd E:\\LLM\\ragflow-main\\docker
 findstr /C:"profiles" docker-compose.yml
 \`\`\`
 
-- **有找到 \`profiles:\`**（\`ragflow-main\` 目前是這樣）：
-
-  \`\`\`powershell
-  docker compose -f docker-compose.yml --profile cpu up -d
-  \`\`\`
-
 - **沒找到**（舊版）：
 
   \`\`\`powershell
   docker compose -f docker-compose.yml up -d
   \`\`\`
+
+- **有找到 \`profiles:\`**（\`ragflow-main\` 目前是這樣）：**要給兩個 profile，不是一個。**
+
+  \`\`\`powershell
+  findstr /C:"DOC_ENGINE" .env
+  \`\`\`
+
+  \`\`\`powershell
+  docker compose -f docker-compose.yml --profile cpu --profile elasticsearch up -d
+  \`\`\`
+
+  **第二個 profile 的名字要跟 \`DOC_ENGINE\` 一致。** \`docker-compose-base.yml\` 裡的文件搜尋引擎
+  （\`es01\` / \`infinity\` / \`opensearch01\`）每一個都被自己的 profile 擋著：
+
+  | \`DOC_ENGINE\` | 要加的 profile | 起來的容器 |
+  |---|---|---|
+  | \`elasticsearch\`（預設）| \`--profile elasticsearch\` | \`docker-es01-1\` |
+  | \`infinity\` | \`--profile infinity\` | \`docker-infinity-1\` |
+  | \`opensearch\` | \`--profile opensearch\` | \`docker-opensearch01-1\` |
+
+  **只給 \`--profile cpu\` 的話，mysql / minio / redis / ragflow-cpu 都會正常起來、網頁也打得開，
+  但沒有搜尋引擎** —— 症狀要到上傳文件、按解析的時候才出現（卡住或失敗），很難聯想回這一步。
+
+  > \`vm.max_map_count\` 沒設好就起 Elasticsearch，它會直接退出並反覆重啟。
+  > **先把第 2、3 步做完再加 \`--profile elasticsearch\`。** 機器記憶體吃緊的話，
+  > 可以改用 \`DOC_ENGINE=infinity\`（\`.env\` 裡改），它不需要 \`vm.max_map_count\`、也吃得比較少。
 
 第一次會下載映像檔，好幾 GB，會跑一陣子。\`docker/.env\` 裡的 \`RAGFLOW_IMAGE\` 已經釘在
 \`infiniflow/ragflow:v0.26.4\`。拉不動的話，同一個檔案裡有註解掉的阿里雲與華為雲鏡像位址可以換。
@@ -286,12 +307,15 @@ findstr /C:"profiles" docker-compose.yml
 ## 5. 等它起來
 
 \`\`\`powershell
-docker compose -f docker-compose.yml ps
+docker compose -f docker-compose.yml --profile cpu --profile elasticsearch ps
 docker logs -f docker-ragflow-cpu-1
 \`\`\`
 
 看到 **\`Running on all addresses (0.0.0.0)\`** 就是好了（這行出自官方 README 的說明）。
 按 Ctrl+C 離開 log 不會關掉服務。
+
+**清單裡要有搜尋引擎那個容器**（預設是 \`docker-es01-1\`）。只看到 mysql、minio、redis、ragflow-cpu
+四個就是第 4 步的 profile 少給了 —— 現在補上去還來得及，重跑一次 \`up -d\` 即可，資料不會掉。
 
 ## 6. 開網頁、註冊帳號
 
@@ -330,7 +354,9 @@ http://localhost
 | Elasticsearch 一直重啟 | \`vm.max_map_count\` 沒設好（第 3 步），或 WSL 記憶體不足 |
 | 網頁打不開 | 80 埠被佔用（IIS、其他服務）。改 \`.env\` 的 \`SVR_WEB_HTTP_PORT\`，重新 \`up -d\` |
 | 映像檔下載很慢或失敗 | 換 \`.env\` 裡註解掉的國內鏡像位址 |
-| 想整組重來 | \`docker compose -f docker-compose.yml --profile cpu down -v\`（\`-v\` 會一併刪掉資料）|
+| 文件上傳後解析卡住或失敗 | 搜尋引擎沒起來。\`ps\` 看有沒有 \`docker-es01-1\`，沒有就是第 4 步少給 \`--profile elasticsearch\` |
+| \`docker-es01-1\` 反覆重啟 | \`vm.max_map_count\` 沒設好（第 3 步），或記憶體不足 |
+| 想整組重來 | \`docker compose -f docker-compose.yml --profile cpu --profile elasticsearch down -v\`（\`-v\` 會一併刪掉資料）|
 
 **關於這份原始碼：** \`ragflow-main\` 是 main 分支的 zip，沒有 \`.git\`，所以官方 README 那句
 \`git checkout v0.26.4\` 做不到。\`.env\` 已經釘住 v0.26.4 的映像，一般情況可以直接用；
