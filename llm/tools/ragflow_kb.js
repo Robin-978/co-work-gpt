@@ -172,15 +172,56 @@ write('00-啟動 RAGFlow（Windows）.md', `# 啟動 RAGFlow（Windows）
 記憶體是硬門檻。\`docker/.env\` 裡 \`MEM_LIMIT=8073741824\`（約 8 GB）是給 Elasticsearch 一個容器用的，
 主機／WSL 能用的記憶體要明顯比這個大，否則 Elasticsearch 會反覆重啟。
 
-## 1. 裝 Docker Desktop
+## 1. 裝 Docker
 
-到 Docker 官網裝 Docker Desktop for Windows，安裝時選 **WSL 2 backend**。
-裝完在 PowerShell 確認版本：
+### 先確認是不是「裝了、但這個視窗看不到」
 
 \`\`\`powershell
-docker version
-docker compose version
+Get-Command docker -ErrorAction SilentlyContinue
+Test-Path "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe"
 \`\`\`
+
+- 第二行是 \`True\` → **已經裝了**。多半是兩種情況：安裝之後沒有重開 PowerShell（舊視窗的 PATH 不會更新），
+  或 Docker Desktop 沒在執行。**開一個新的 PowerShell**，並確認工作列的鯨魚圖示顯示 Engine running。
+- 兩行都沒有東西 → 還沒裝，往下走。
+
+### 安裝（以系統管理員身分開 PowerShell）
+
+1. **開啟 WSL2**：
+
+   \`\`\`powershell
+   wsl --install
+   \`\`\`
+
+   然後**重開機**。已經有 WSL 的話改用 \`wsl --update\` 與 \`wsl --set-default-version 2\`。
+
+2. **確認虛擬化有開**：工作管理員 → 效能 → CPU → 右下角「虛擬化」要是「已啟用」。
+   顯示已停用的話得進 BIOS 開 Intel VT-x／AMD-V，這一關過不了後面都免談。
+
+3. **下載安裝 Docker Desktop for Windows**（docker.com），安裝精靈裡勾 **Use WSL 2 instead of Hyper-V**。
+
+4. 安裝完啟動 Docker Desktop，等鯨魚圖示變成 **Engine running**。
+
+5. **開新的 PowerShell** 確認：
+
+   \`\`\`powershell
+   docker version
+   docker compose version
+   \`\`\`
+
+   要 Docker ≥ 24.0.0、Compose ≥ v2.26.1。
+
+### 公司環境請先確認授權
+
+**Docker Desktop 用於商業用途有付費授權的條件**（跟公司規模有關）。廠內要用的話，
+先跟 IT／法務確認，條款以 Docker 官網的 Docker Desktop license 頁為準 —— 這裡不列數字，
+以免過期或記錯害你踩到。
+
+不想處理授權的話，這些替代方案跑 RAGFlow 都可以，因為它只需要 \`docker\` 與 \`docker compose\`：
+
+- **在 WSL2 的 Ubuntu 裡直接裝 Docker Engine**（不裝 Docker Desktop）。這條最乾淨，
+  但 \`vm.max_map_count\` 要在那個發行版裡設，專案路徑則變成 \`/mnt/e/LLM/ragflow-main\`。
+- **Rancher Desktop** 或 **Podman Desktop**。
 
 ## 2. 設定 WSL 的記憶體與 vm.max_map_count
 
@@ -283,7 +324,9 @@ http://localhost
 
 | 現象 | 多半是 |
 |---|---|
+| \`無法辨識 'docker' 詞彙\` / \`command not found\` | Docker 還沒裝，或裝完沒開新的 PowerShell（見第 1 步）|
 | \`docker compose up\` 跑完卻沒有 ragflow 容器 | 沒加 \`--profile cpu\`（見第 4 步）|
+| \`error during connect\` / \`pipe/dockerDesktopLinuxEngine\` | Docker Desktop 沒在跑。啟動它，等鯨魚圖示變 Engine running |
 | Elasticsearch 一直重啟 | \`vm.max_map_count\` 沒設好（第 3 步），或 WSL 記憶體不足 |
 | 網頁打不開 | 80 埠被佔用（IIS、其他服務）。改 \`.env\` 的 \`SVR_WEB_HTTP_PORT\`，重新 \`up -d\` |
 | 映像檔下載很慢或失敗 | 換 \`.env\` 裡註解掉的國內鏡像位址 |
