@@ -148,6 +148,158 @@ write('99-不要放進向量庫的東西.md', `# 不要放進向量庫的東西
 - 日常對話的句子沒有匯出——那些在訓練語料裡是用來給模型文法感覺的，不是知識。
 `);
 
+/* ── 5b. 啟動指南（Windows）──────────────────────────────
+   這一份是手寫的，內容查自 infiniflow/ragflow 的 README 與 docker/.env、docker-compose.yml。
+   凡是查證來的都標了出處；WSL 那幾條是通用做法、RAGFlow 官方沒有寫細節，所以一律附驗證指令，
+   讓人可以自己確認，而不是相信我。 */
+write('00-啟動 RAGFlow（Windows）.md', `# 啟動 RAGFlow（Windows）
+
+先講一件會直接卡住的事：**\`ragflow-main\` 這份原始碼的 \`docker-compose.yml\` 用了 profiles，
+所以官方 README 上那句 \`docker compose up -d\` 在這份樹上不會啟動主服務。** 要加 \`--profile cpu\`。
+下面第 4 步有驗證方法。
+
+## 0. 先確認機器夠
+
+官方要求（infiniflow/ragflow README）：
+
+| 項目 | 最低 |
+|---|---|
+| CPU | 4 核以上 |
+| 記憶體 | **16 GB 以上** |
+| 磁碟 | 50 GB 以上 |
+| Docker | ≥ 24.0.0，Docker Compose ≥ v2.26.1 |
+
+記憶體是硬門檻。\`docker/.env\` 裡 \`MEM_LIMIT=8073741824\`（約 8 GB）是給 Elasticsearch 一個容器用的，
+主機／WSL 能用的記憶體要明顯比這個大，否則 Elasticsearch 會反覆重啟。
+
+## 1. 裝 Docker Desktop
+
+到 Docker 官網裝 Docker Desktop for Windows，安裝時選 **WSL 2 backend**。
+裝完在 PowerShell 確認版本：
+
+\`\`\`powershell
+docker version
+docker compose version
+\`\`\`
+
+## 2. 設定 WSL 的記憶體與 vm.max_map_count
+
+Elasticsearch 需要 \`vm.max_map_count\` ≥ 262144。Windows 上這個值屬於 WSL 的 Linux 核心，
+不是 Windows 本身。RAGFlow 的 README 只說「Windows 請改 \`.wslconfig\`」，沒有寫細節，
+所以下面是 WSL2 的通用做法 —— **做完一定要用第 3 步的指令驗證，不要假設它生效了。**
+
+用記事本建立或編輯 \`C:\\Users\\<你的帳號>\\.wslconfig\`：
+
+\`\`\`ini
+[wsl2]
+memory=12GB
+processors=4
+kernelCommandLine=sysctl.vm.max_map_count=262144
+\`\`\`
+
+存檔後在 PowerShell：
+
+\`\`\`powershell
+wsl --shutdown
+\`\`\`
+
+然後重新啟動 Docker Desktop。
+
+## 3. 驗證真的生效了
+
+\`\`\`powershell
+wsl -d docker-desktop sysctl vm.max_map_count
+\`\`\`
+
+要看到 \`vm.max_map_count = 262144\`（或更大）。**如果還是 65530，就是 \`.wslconfig\` 沒吃到** ——
+檢查檔名沒有被記事本加上 \`.txt\`、路徑是不是在你的使用者資料夾底下、以及有沒有真的 \`wsl --shutdown\` 過。
+
+暫時的替代做法（重開機後會失效，但可以先讓你跑起來）：
+
+\`\`\`powershell
+wsl -d docker-desktop sysctl -w vm.max_map_count=262144
+\`\`\`
+
+## 4. 啟動
+
+\`\`\`powershell
+cd E:\\LLM\\ragflow-main\\docker
+findstr /C:"profiles" docker-compose.yml
+\`\`\`
+
+- **有找到 \`profiles:\`**（\`ragflow-main\` 目前是這樣）：
+
+  \`\`\`powershell
+  docker compose -f docker-compose.yml --profile cpu up -d
+  \`\`\`
+
+- **沒找到**（舊版）：
+
+  \`\`\`powershell
+  docker compose -f docker-compose.yml up -d
+  \`\`\`
+
+第一次會下載映像檔，好幾 GB，會跑一陣子。\`docker/.env\` 裡的 \`RAGFLOW_IMAGE\` 已經釘在
+\`infiniflow/ragflow:v0.26.4\`。拉不動的話，同一個檔案裡有註解掉的阿里雲與華為雲鏡像位址可以換。
+
+## 5. 等它起來
+
+\`\`\`powershell
+docker compose -f docker-compose.yml ps
+docker logs -f docker-ragflow-cpu-1
+\`\`\`
+
+看到 **\`Running on all addresses (0.0.0.0)\`** 就是好了（這行出自官方 README 的說明）。
+按 Ctrl+C 離開 log 不會關掉服務。
+
+## 6. 開網頁、註冊帳號
+
+\`\`\`
+http://localhost
+\`\`\`
+
+\`.env\` 裡 \`SVR_WEB_HTTP_PORT=80\`，所以不用加埠號。**沒有預設帳密，第一次進去要自己註冊一個帳號**
+（官方 README：「On first visit, create an account or register」）。這個帳號是建在你本機的資料庫裡。
+
+## 7. 設定模型 —— 這一步決定資料會不會出廠
+
+左上角頭像 → **Model providers**。
+
+**這是整個安裝過程最重要的一步。** 選雲端供應商並填 API key，等於把你上傳的每一份文件內容
+送到對方伺服器（embedding 要把全文送出去，不只是問題）。製程參數、良率、機台資料不能出廠的話：
+
+- **LLM 與 embedding 都要選可以本機跑的**，例如 Ollama（另外裝，在同一台或廠內另一台機器）。
+- 在 Model providers 裡新增 Ollama，Base URL 指向你的 Ollama 位址。
+- 從 Docker 容器連本機的 Ollama，位址要用 \`http://host.docker.internal:11434\`，不是 \`localhost\`。
+
+沒有本機模型可用之前，**先不要上傳真實的廠內資料**。可以先用這個知識庫（都是一般性的原理說明，
+沒有廠內數值）把流程跑通。
+
+## 8. 建知識庫、上傳文件
+
+到這裡才輪到這個資料夾裡的東西 —— 步驟見 \`README.md\`。
+
+## 卡住的時候
+
+| 現象 | 多半是 |
+|---|---|
+| \`docker compose up\` 跑完卻沒有 ragflow 容器 | 沒加 \`--profile cpu\`（見第 4 步）|
+| Elasticsearch 一直重啟 | \`vm.max_map_count\` 沒設好（第 3 步），或 WSL 記憶體不足 |
+| 網頁打不開 | 80 埠被佔用（IIS、其他服務）。改 \`.env\` 的 \`SVR_WEB_HTTP_PORT\`，重新 \`up -d\` |
+| 映像檔下載很慢或失敗 | 換 \`.env\` 裡註解掉的國內鏡像位址 |
+| 想整組重來 | \`docker compose -f docker-compose.yml --profile cpu down -v\`（\`-v\` 會一併刪掉資料）|
+
+**關於這份原始碼：** \`ragflow-main\` 是 main 分支的 zip，沒有 \`.git\`，所以官方 README 那句
+\`git checkout v0.26.4\` 做不到。\`.env\` 已經釘住 v0.26.4 的映像，一般情況可以直接用；
+萬一 compose 檔跟映像檔版本對不上而起不來，就去 GitHub 的 Releases 下載 **v0.26.4 的原始碼 zip**，
+讓設定檔與映像檔同一版。
+
+---
+
+*本文的指令與數值查自 infiniflow/ragflow 的 \`README.md\`、\`docker/.env\`、\`docker/docker-compose.yml\`（main 分支）。
+你手上那份如果版本不同，以你資料夾裡的檔案為準 —— 第 4 步的 \`findstr\` 就是為此而設。*
+`);
+
 /* ── 6. README ─────────────────────────────────────────── */
 write('README.md', `# EPI / SPC 知識庫（給 RAGFlow 用）
 
@@ -159,14 +311,10 @@ ${files.length} 份 Markdown，涵蓋 III/V 磊晶、MOCVD 製程與設備、量
 
 ## 怎麼灌進 RAGFlow
 
-RAGFlow 還沒跑起來的話，先照它自己的說明啟動（在 \`ragflow-main\` 裡）：
+**RAGFlow 還沒跑起來的話，先看 \`00-啟動 RAGFlow（Windows）.md\`** —— 那份有完整的 Windows 步驟，
+包含官方 README 沒寫、但在這份原始碼上一定會踩到的 \`--profile cpu\`。
 
-\`\`\`bash
-cd docker
-docker compose up -d          # 版本不同，實際指令以該版本的 README 為準
-\`\`\`
-
-啟動之後：
+跑起來之後：
 
 1. 開瀏覽器進 RAGFlow 的介面，建立一個新的 **Knowledge Base**。
 2. **Embedding 模型選可以離線跑的**（資料不能出廠，不要用雲端 API）。
