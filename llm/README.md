@@ -90,6 +90,7 @@ OUT=/tmp/try.json STEPS=50 node run_train.js      # 試超參數一定要改輸�
 - `expert.js` — 把三個領域包成一份「LLM 可呼叫的工具目錄」，含 function-calling 用的 JSON 定義
 - `page.template.html` — 網頁模板，`__WEIGHTS__` 會被換成權重、`__DOC_USER__` / `__DOC_TECH__` 會被換成兩份手冊
 - `ctx_test.js` — 量「上下文到底用到幾個字」：截短前文再比 NLL，附短前綴的對照組
+- `ragflow_kb.js` — 把語料、材料常數表、工具目錄匯出成 RAGFlow 可上傳的 Markdown 知識庫
 - `md.js` — 極小的 Markdown → HTML 轉換器，只支援 `docs/*.md` 用到的語法（21 項自我測試：`node md.js --test`）
 - `build.js` — 打包成單一 HTML
 

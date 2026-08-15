@@ -1149,4 +1149,21 @@ function buildCorpus() {
   return parts.join('\n') + '\n';
 }
 
-module.exports = { SENTENCES, PARAGRAPHS, buildCorpus };
+// 分好組的原始內容。訓練只需要攤平的 SENTENCES，但要把語料匯出成知識庫文件時
+// （`ragflow_kb.js`）得知道每一句屬於哪個主題——分組資訊本來就在這個檔案裡，
+// 與其在別處重抄一份，不如直接開出來。
+const GROUPS = [
+  { id: '01', title: '磊晶材料與結構', items: [MATERIAL, REINFORCE] },
+  { id: '02', title: 'MOCVD 製程與設備', items: [PROCESS, EQUIPMENT] },
+  { id: '03', title: '量測與分析', items: [METROLOGY, ANALYSIS] },
+  { id: '04', title: 'SPC：管制圖與判異', items: [SPC_BASIC, SPC_RULE] },
+  { id: '05', title: '製程能力與量測系統分析', items: [SPC_CAPABILITY, SPC_MSA, SPC_TOOL] },
+  { id: '06', title: '可靠度工程', items: [RELIABILITY] },
+  { id: '07', title: '安全與環保', items: [SAFETY] },
+  { id: '08', title: '統計方法', items: [STATISTICS] },
+  { id: '09', title: '品質與生產管理', items: [QUALITY, PRODUCTION, YIELD] },
+  { id: '10', title: '金融財經與經濟', items: [FINANCE, FINANCE_REINFORCE, ECONOMY] },
+  { id: '11', title: '磊晶與 SPC 的交叉主題', items: [CROSS, REINFORCE2] },
+];
+
+module.exports = { SENTENCES, PARAGRAPHS, GROUPS, buildCorpus };
